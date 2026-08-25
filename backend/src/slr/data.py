@@ -316,11 +316,13 @@ def loaders(rows: list[dict], img_size: int, batch_size: int, workers: int = 4
     return out
 
 
-# ponytail: no hand detection/cropping yet. Cropping to the hand with MediaPipe
-# is the single biggest expected gain on cross-corpus transfer, since it deletes
-# the background shortcut outright rather than augmenting around it. Add it as a
-# preprocessing pass writing crops beside the originals, once the uncropped
-# cross-corpus baseline is on the board and there is something to compare to.
+# Hand cropping lives in `slr.hands`, as an offline pass that mirrors a corpus
+# into `dataset/crops/` and hands back a manifest pointing at it. It is not a
+# transform here on purpose: detection costs ~25 ms an image, which is an hour
+# added to every epoch rather than once to the dataset, and a crop that is
+# recomputed every epoch cannot be looked at. Train the same architecture on the
+# original manifest and on the cropped one; the difference between the two
+# cross-corpus numbers is what cropping is worth.
 
 
 def main(argv: list[str] | None = None) -> int:

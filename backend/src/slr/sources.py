@@ -165,6 +165,19 @@ REGISTRY: dict[str, Source] = {s.name: s for s in [
              "truth. Free to download, no credentials needed.",
     ),
     Source(
+        name="mine",
+        kind="local", ref="photos taken in the app and labelled in the page",
+        role="either",
+        group_fn=lambda p, root: p.relative_to(root).parts[0],
+        note="Your own hand, captured through app/web and filed as "
+             "<session>/<LABEL>/. The session directory IS the group key: one "
+             "sitting shares a light, a shirt and a camera distance, so its "
+             "frames are near-copies and must never straddle a split. This is "
+             "one signer, so anything trained on it is signer-dependent by "
+             "construction - report it as adaptation, never as a headline. "
+             "Never downloaded and never committed.",
+    ),
+    Source(
         name="slmnist",
         kind="hf", ref="Voxel51/American-Sign-Language-MNIST", role="either",
         needs_group_recovery=True,
@@ -196,6 +209,10 @@ def download(name: str, root: Path = DEFAULT_ROOT) -> Path:
     dest = root / name
     if dest.exists() and any(dest.rglob("*")):
         print(f"[skip] {name} already at {dest}")
+        return dest
+    if src.kind == "local":
+        print(f"[local] {name} is collected on this machine, not downloaded - "
+              f"take photos in the app and label them; they land in {dest}")
         return dest
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -230,6 +247,9 @@ def download(name: str, root: Path = DEFAULT_ROOT) -> Path:
 # --- manifest ----------------------------------------------------------------
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+# Where `server.captures` parks a photo between being taken and being named.
+# It is a waiting room, not a class, so it never reaches a manifest.
+STAGING = "_inbox"
 MANIFEST_COLS = ["path", "label", "label_idx", "source", "group", "split"]
 
 
@@ -247,6 +267,7 @@ def scan(name: str, root: Path = DEFAULT_ROOT) -> list[dict]:
 
     rows: list[dict] = []
     skipped: set[str] = set()
+    staged = 0
     for p in sorted(base.rglob("*")):
         if p.suffix.lower() not in IMG_EXT:
             continue
@@ -254,6 +275,9 @@ def scan(name: str, root: Path = DEFAULT_ROOT) -> list[dict]:
         if len(parts) <= src.label_depth - 1:
             continue
         raw = parts[-(src.label_depth + 1)]
+        if raw == STAGING:
+            staged += 1                 # a capture nobody has named yet
+            continue
         if src.verbatim_labels:
             label, idx = raw, -1        # sentinel: not trainable, audit only
         else:
@@ -270,6 +294,9 @@ def scan(name: str, root: Path = DEFAULT_ROOT) -> list[dict]:
             "group": f"{name}/{src.group_fn(p, base)}",
             "split": "",
         })
+    if staged:
+        print(f"[scan] {name}: {staged} captures are still unlabelled in {STAGING}/ "
+              "and are not in this manifest; label them in the app first")
     if skipped:
         print(f"[warn] {name}: dropped dirs outside the 29-class vocabulary: {sorted(skipped)}")
     if src.verbatim_labels:

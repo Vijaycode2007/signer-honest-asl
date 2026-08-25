@@ -1,0 +1,10 @@
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+app/weights/*.pt
+app/design
+dataset
+docs
+runs
+backend-v2
+.git

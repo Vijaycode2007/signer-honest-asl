@@ -19,7 +19,19 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from . import data, model as M, sources
+from . import data, hands, model as M, sources
+
+
+def _accumulation_group_size(i: int, total: int, accumulate: int) -> int:
+    """Microbatches contributing to `i`'s optimizer step, including a short tail."""
+    if accumulate < 1:
+        raise ValueError("accumulate must be at least one")
+    start = (i // accumulate) * accumulate
+    return min(accumulate, total - start)
+
+
+def _should_optimizer_step(i: int, total: int, accumulate: int) -> bool:
+    return (i + 1) % accumulate == 0 or i + 1 == total
 
 
 def _macro_f1(conf: torch.Tensor) -> float:
@@ -54,7 +66,8 @@ def evaluate_split(net: nn.Module, loader, dev: torch.device, n_classes: int
 
 def train_one(rows: list[dict], preset: str, epochs: int = 12, out_dir: Path = Path("runs"),
               workers: int = 4, label_smoothing: float = 0.1, seed: int = 0,
-              tag: str = "", eval_test: bool = True) -> dict:
+              tag: str = "", eval_test: bool = True,
+              batch_size: int | None = None, accumulate: int = 1) -> dict:
     """Fine-tune one backbone.
 
     `eval_test=False` during an architecture search: candidates are compared on
@@ -65,17 +78,33 @@ def train_one(rows: list[dict], preset: str, epochs: int = 12, out_dir: Path = P
     dev = M.device()
     n_classes = len(sources.CLASSES)
 
-    dl = data.loaders(rows, p.img_size, p.batch_size, workers)
+    micro_batch = batch_size or p.batch_size
+    dl = data.loaders(rows, p.img_size, micro_batch, workers)
     if "train" not in dl:
         raise ValueError("no train rows in manifest")
 
+    # Inferred from where the images live, not passed as a flag, so it cannot be
+    # forgotten at train time and contradicted at serve time. `slr.api` reads it
+    # back off the checkpoint and applies the same crop to every incoming photo.
+    n_crop = sum(str(hands.CROP_ROOT) in r["path"] for r in rows)
+    if 0 < n_crop < len(rows):
+        raise ValueError(
+            f"{n_crop} of {len(rows)} rows point into {hands.CROP_ROOT} and the "
+            "rest do not. A half-cropped manifest trains on two different "
+            "framings and there is no honest way to stamp the checkpoint; "
+            "re-run `python -m slr.hands crop` over the whole manifest."
+        )
+    hand_crop = n_crop == len(rows)
+    print(f"[train] hand-cropped input: {hand_crop}")
+
     net = M.build(preset, n_classes).to(dev)
     print(f"[train] {preset} ({M.n_params(net) / 1e6:.1f}M params) on {dev}, "
-          f"{len(dl['train'].dataset)} train imgs")
+          f"{len(dl['train'].dataset)} train imgs, microbatch={micro_batch}, "
+          f"accumulate={accumulate}, effective_batch={micro_batch * accumulate}")
 
     opt = torch.optim.AdamW(
         M.param_groups(net, p.lr, layer_decay=p.layer_decay), lr=p.lr, betas=(0.9, 0.999))
-    steps = max(1, epochs * len(dl["train"]))
+    steps = max(1, epochs * math.ceil(len(dl["train"]) / accumulate))
     warmup = min(500, steps // 10)
 
     def lr_at(step: int) -> float:
@@ -96,17 +125,21 @@ def train_one(rows: list[dict], preset: str, epochs: int = 12, out_dir: Path = P
     for ep in range(epochs):
         net.train()
         t0, seen, run_loss = time.time(), 0, 0.0
-        for x, y in dl["train"]:
+        total_micro = len(dl["train"])
+        opt.zero_grad(set_to_none=True)
+        for micro_i, (x, y) in enumerate(dl["train"]):
             x, y = x.to(dev, non_blocking=True), y.to(dev, non_blocking=True)
             with torch.autocast(dev.type, dtype=torch.float16, enabled=dev.type == "cuda"):
                 loss = crit(net(x), y)
-            opt.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            scaler.unscale_(opt)
-            torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
-            scaler.step(opt)
-            scaler.update()
-            sched.step()
+            group_size = _accumulation_group_size(micro_i, total_micro, accumulate)
+            scaler.scale(loss / group_size).backward()
+            if _should_optimizer_step(micro_i, total_micro, accumulate):
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+                scaler.step(opt)
+                scaler.update()
+                sched.step()
+                opt.zero_grad(set_to_none=True)
             run_loss += loss.item() * y.numel()
             seen += y.numel()
 
@@ -118,14 +151,18 @@ def train_one(rows: list[dict], preset: str, epochs: int = 12, out_dir: Path = P
             if vf > best["val_f1"]:
                 best = {"epoch": ep, "val_f1": vf, "val_acc": va}
                 torch.save({"preset": preset, "classes": sources.CLASSES,
-                            "img_size": p.img_size, "state_dict": net.state_dict()},
+                            "img_size": p.img_size, "hand_crop": hand_crop,
+                            "state_dict": net.state_dict()},
                            run / "best.pt")
         history.append(rec)
         print(f"[train] ep{ep:02d} " + " ".join(
             f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in rec.items()))
 
     result = {"preset": preset, "params_m": round(M.n_params(net) / 1e6, 2),
-              "epochs": epochs, "best": best, "history": history}
+              "epochs": epochs, "batch_size": micro_batch,
+              "gradient_accumulation": accumulate,
+              "effective_batch_size": micro_batch * accumulate,
+              "best": best, "history": history}
 
     if eval_test and "test" in dl:
         if (run / "best.pt").exists():
@@ -229,6 +266,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="one preset, or a named sweep: " + ", ".join(M.SWEEPS))
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--batch-size", type=int, default=None,
+                    help="microbatch override for constrained devices")
+    ap.add_argument("--accumulate", type=int, default=1,
+                    help="microbatches per optimizer step")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("runs"))
     ap.add_argument("--tag", default="")
@@ -239,7 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         sweep(rows, M.SWEEPS[a.preset], a.epochs, a.out, a.workers, a.seed,
               tag=a.tag or a.preset)
     else:
-        train_one(rows, a.preset, a.epochs, a.out, a.workers, seed=a.seed, tag=a.tag)
+        train_one(rows, a.preset, a.epochs, a.out, a.workers, seed=a.seed, tag=a.tag,
+                  batch_size=a.batch_size, accumulate=a.accumulate)
     return 0
 
 

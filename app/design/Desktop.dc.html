@@ -1,0 +1,296 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #FAF6F0; font-family: Figtree, "Segoe UI", system-ui, sans-serif; }
+    a { color: #B4603F; text-decoration: none; }
+    a:hover { color: #8E4830; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1280px; height: 860px; background: #FAF6F0; color: #2E2823; display: flex; flex-direction: column; overflow: hidden;">
+
+  <!-- top bar -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 44px; border-bottom: 1px solid #EFE7DC;">
+    <div style="display: flex; align-items: center; gap: 11px;">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11"></path>
+        <path d="M11 10.5V4.5a1.5 1.5 0 0 1 3 0V11"></path>
+        <path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V13"></path>
+        <path d="M8 11V9.5a1.5 1.5 0 0 0-3 0v4a7 7 0 0 0 7 7h1a7 7 0 0 0 7-7v-3"></path>
+      </svg>
+      <span style="font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; letter-spacing: -0.01em;">Sign Reader</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 26px;">
+      <span style="font-size: 13.5px; color: #A9A096;">Reads fingerspelling · 29 signs</span>
+      <a href="#" style="font-size: 14.5px; font-weight: 500; color: #736A60;">How it works</a>
+    </div>
+  </div>
+
+  <!-- body -->
+  <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px; padding: 30px 44px 34px 44px; min-height: 0;">
+
+    <!-- left: viewfinder -->
+    <div style="position: relative; background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 26px; overflow: hidden; box-shadow: 0 2px 14px rgba(80,60,40,0.05);">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #F4EDE4;">
+        <svg viewBox="0 0 140 170" width="272" height="330" style="display: block;">
+          <g fill="#E0C8AF">
+            <rect x="42" y="34" width="16" height="64" rx="8"></rect>
+            <rect x="62" y="24" width="16" height="74" rx="8"></rect>
+            <rect x="82" y="32" width="16" height="66" rx="8"></rect>
+            <rect x="102" y="48" width="15" height="52" rx="7.5"></rect>
+            <rect x="18" y="74" width="15" height="44" rx="7.5" transform="rotate(-26 25 96)"></rect>
+            <rect x="38" y="84" width="80" height="66" rx="27"></rect>
+          </g>
+        </svg>
+      </div>
+
+      <sc-if value="{{heatOn}}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; inset: 0; background: radial-gradient(circle at 50% 33%, rgba(214,84,45,0.60) 0%, rgba(214,84,45,0.33) 20%, rgba(214,84,45,0.10) 36%, rgba(214,84,45,0) 54%);"></div>
+      </sc-if>
+
+      <sc-if value="{{idle}}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 0 44px 40px 44px; display: flex; flex-direction: column; align-items: center; background: linear-gradient(to bottom, rgba(244,237,228,0) 0%, rgba(244,237,228,0.94) 60%);">
+          <p style="font-family: Newsreader, Georgia, serif; font-size: 25px; line-height: 1.3; text-align: center; margin: 0;">Hold one hand in the frame</p>
+          <p style="font-size: 15px; line-height: 1.45; text-align: center; margin: 8px 0 0 0; color: #736A60;">Good light, plain wall behind you.</p>
+        </div>
+      </sc-if>
+
+      <!-- overlay chips -->
+      <div style="position: absolute; left: 18px; top: 18px; display: flex; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 7px; background: rgba(255,253,250,0.92); border: 1px solid #EFE7DC; border-radius: 999px; padding: 7px 13px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #4A8464;"></span>
+          <span style="font-size: 12.5px; font-weight: 500; color: #2E2823;">Camera on</span>
+        </div>
+      </div>
+
+      <sc-if value="{{showResult}}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{onHeat}}" style="position: absolute; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 7px; border: 1px solid {{heat.border}}; background: {{heat.bg}}; color: {{heat.fg}}; border-radius: 999px; padding: 9px 15px; font-family: Figtree, system-ui, sans-serif; font-size: 13px; font-weight: 600; cursor: pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"></path>
+            <circle cx="12" cy="12" r="2.6"></circle>
+          </svg>
+          <span>{{heat.label}}</span>
+        </button>
+      </sc-if>
+    </div>
+
+    <!-- right: readout -->
+    <div style="display: flex; flex-direction: column; gap: 18px; min-height: 0;">
+
+      <!-- message -->
+      <div style="background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 22px; padding: 22px 24px; box-shadow: 0 1px 2px rgba(80,60,40,0.04);">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;">
+          <span style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A9A096;">Your message</span>
+          <div style="display: flex; gap: 8px;">
+            <button onClick="{{onBack}}" style="display: flex; align-items: center; gap: 7px; border: 1px solid #E9E0D5; background: #FDFBF8; border-radius: 10px; padding: 7px 13px; font-family: Figtree, system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #736A60; cursor: pointer;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6H9.5a2 2 0 0 0-1.5.7L3 12l5 5.3a2 2 0 0 0 1.5.7H20a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z"></path>
+                <path d="M16 10l-4 4M12 10l4 4"></path>
+              </svg>
+              <span>Undo letter</span>
+            </button>
+            <button onClick="{{onClear}}" style="border: 1px solid #E9E0D5; background: #FDFBF8; border-radius: 10px; padding: 7px 13px; font-family: Figtree, system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #736A60; cursor: pointer;">Clear</button>
+          </div>
+        </div>
+        <div style="min-height: 62px; display: flex; align-items: center;">
+          <sc-if value="{{msg.empty}}" hint-placeholder-val="{{ false }}">
+            <span style="font-family: Newsreader, Georgia, serif; font-size: 27px; font-style: italic; color: #C4BBB0;">Nothing spelled yet</span>
+          </sc-if>
+          <sc-if value="{{msg.has}}" hint-placeholder-val="{{ true }}">
+            <span style="font-family: Newsreader, Georgia, serif; font-size: 46px; font-weight: 500; letter-spacing: 0.14em; line-height: 1.1; word-break: break-all;">{{msg.text}}</span>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- result -->
+      <div style="flex-grow: 1; background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 22px; padding: 24px; box-shadow: 0 1px 2px rgba(80,60,40,0.04); display: flex; flex-direction: column; min-height: 0;">
+
+        <sc-if value="{{idle}}" hint-placeholder-val="{{ false }}">
+          <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#D6CCC0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path>
+              <circle cx="12" cy="12.7" r="3.4"></circle>
+            </svg>
+            <span style="font-size: 15px; color: #A9A096;">Take a photo to read your first letter</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{showResult}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; height: 100%;">
+
+            <sc-if value="{{res.confident}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; gap: 22px;">
+                <div style="width: 132px; height: 132px; flex-shrink: 0; border-radius: 34px; background: #F1F5F1; border: 1px solid #DCE7DE; display: flex; align-items: center; justify-content: center;">
+                  <span style="font-family: Newsreader, Georgia, serif; font-size: 84px; font-weight: 500; line-height: 1;">{{res.letter}}</span>
+                </div>
+                <div style="flex-grow: 1; min-width: 0;">
+                  <div style="font-size: 19px; font-weight: 600; color: {{res.tone}}; margin-bottom: 4px;">{{res.phrase}}</div>
+                  <div style="font-size: 14.5px; color: #736A60; margin-bottom: 14px;">Added to your message</div>
+                  <div style="height: 9px; border-radius: 5px; background: #EDE5DA; overflow: hidden;">
+                    <div style="height: 100%; width: {{res.pct}}; border-radius: 5px; background: {{res.tone}};"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12.5px; color: #A9A096;">
+                    <span>{{res.confText}}</span>
+                    <span>{{res.ms}}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{res.abstain}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: center; gap: 22px;">
+                <div style="width: 132px; height: 132px; flex-shrink: 0; border-radius: 34px; background: #FAF0EA; border: 1px solid #F0DCD1; display: flex; align-items: center; justify-content: center;">
+                  <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z"></path>
+                    <path d="M9.4 9.3a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.3-2.6 2.3"></path>
+                    <path d="M12 16.6h.01"></path>
+                  </svg>
+                </div>
+                <div style="flex-grow: 1; min-width: 0;">
+                  <div style="font-family: Newsreader, Georgia, serif; font-size: 27px; line-height: 1.25; margin-bottom: 6px;">Not sure on that one</div>
+                  <div style="font-size: 15px; line-height: 1.5; color: #736A60;">Nothing was added to your message. Try again with your hand a little closer to the camera.</div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 14px; font-size: 12.5px; color: #A9A096;">
+                    <span>{{res.confText}} - below the {{threshText}} cut-off</span>
+                    <span>{{res.ms}}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{heatOn}}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top: 18px; padding: 13px 15px; background: #FAF6F0; border-radius: 13px; font-size: 13.5px; line-height: 1.5; color: #8E857A; text-wrap: pretty;">The warm area on the photo is where the model actually looked. If it lights up the wall instead of your hand, don't trust the letter.</div>
+            </sc-if>
+
+            <div style="flex-grow: 1;"></div>
+
+            <sc-if value="{{alts.show}}" hint-placeholder-val="{{ true }}">
+              <div style="padding-top: 18px; border-top: 1px solid #EFE7DC;">
+                <div style="font-size: 12.5px; color: #A9A096; margin-bottom: 9px;">Could also be</div>
+                <div style="display: flex; gap: 9px;">
+                  <sc-for list="{{alts.items}}" as="alt" hint-placeholder-count="2">
+                    <div style="display: flex; align-items: baseline; gap: 7px; border: 1px solid #EFE7DC; border-radius: 11px; padding: 8px 14px;">
+                      <span style="font-family: Newsreader, Georgia, serif; font-size: 19px;">{{alt.letter}}</span>
+                      <span style="font-size: 12.5px; color: #A9A096;">{{alt.pct}}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- capture -->
+      <button onClick="{{onCapture}}" style="display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; height: 66px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: Figtree, system-ui, sans-serif; font-size: 17px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(180,96,63,0.28); flex-shrink: 0;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path>
+          <circle cx="12" cy="12.7" r="3.4"></circle>
+        </svg>
+        <span>{{captureHint}}</span>
+      </button>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#B4603F","options":["#B4603F","#4A8464","#2E2823","#8E4830"],"section":"Look"},"threshold":{"editor":"range","default":0.61,"min":0.3,"max":0.95,"step":0.01,"section":"Behaviour"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { n: 0, msg: '', heat: false };
+  }
+
+  seq() {
+    return [
+      { letter: 'H', conf: 0.91, ms: 38, alts: [['N', 0.03], ['M', 0.02]] },
+      { letter: 'E', conf: 0.87, ms: 41, alts: [['S', 0.05], ['A', 0.03]] },
+      { letter: 'L', conf: 0.79, ms: 39, alts: [['D', 0.09], ['U', 0.05]] },
+      { letter: 'L', conf: 0.83, ms: 40, alts: [['D', 0.07], ['I', 0.04]] },
+      { letter: 'O', conf: 0.42, ms: 44, alts: [['C', 0.21], ['S', 0.16]] },
+      { letter: 'O', conf: 0.84, ms: 37, alts: [['C', 0.08], ['S', 0.04]] }
+    ];
+  }
+
+  phraseFor(c) {
+    if (c >= 0.86) return 'Pretty confident';
+    if (c >= 0.72) return 'Fairly sure';
+    return 'A bit unsure';
+  }
+
+  renderVals() {
+    var accent = this.props.accent || '#B4603F';
+    var thresh = this.props.threshold == null ? 0.61 : this.props.threshold;
+    var sage = '#4A8464';
+    var s = this.state;
+    var seq = this.seq();
+    var cur = s.n > 0 ? seq[(s.n - 1) % seq.length] : null;
+    var abstain = cur ? cur.conf < thresh : false;
+
+    var res = {};
+    var alts = { show: false, items: [] };
+    if (cur) {
+      res = {
+        letter: cur.letter,
+        phrase: this.phraseFor(cur.conf),
+        tone: cur.conf >= 0.72 ? sage : accent,
+        pct: Math.round(cur.conf * 100) + '%',
+        confText: Math.round(cur.conf * 100) + '% sure',
+        ms: cur.ms + ' ms',
+        confident: !abstain,
+        abstain: abstain
+      };
+      alts = {
+        show: true,
+        items: cur.alts.map(function (a) {
+          return { letter: a[0], pct: Math.round(a[1] * 100) + '%' };
+        })
+      };
+    }
+
+    var self = this;
+    return {
+      accent: accent,
+      threshText: Math.round(thresh * 100) + '%',
+      idle: s.n === 0,
+      showResult: s.n > 0,
+      res: res,
+      alts: alts,
+      heatOn: s.heat,
+      heat: s.heat
+        ? { label: 'Hide where it looked', bg: '#FAF0EA', border: '#E7C9B8', fg: accent }
+        : { label: 'Where did it look?', bg: 'rgba(255,253,250,0.92)', border: '#EFE7DC', fg: '#736A60' },
+      captureHint: s.n === 0 ? 'Take a photo' : 'Take the next photo',
+      msg: {
+        text: s.msg.split('').join(' '),
+        empty: s.msg.length === 0,
+        has: s.msg.length > 0
+      },
+      onCapture: function () {
+        var r = seq[self.state.n % seq.length];
+        var keep = r.conf >= thresh;
+        self.setState({
+          n: self.state.n + 1,
+          msg: keep ? self.state.msg + r.letter : self.state.msg,
+          heat: false
+        });
+      },
+      onBack: function () { self.setState({ msg: self.state.msg.slice(0, -1) }); },
+      onClear: function () { self.setState({ msg: '', n: 0, heat: false }); },
+      onHeat: function () { self.setState({ heat: !self.state.heat }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

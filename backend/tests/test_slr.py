@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from slr import data, evaluate, leakage, sources
+from slr import data, evaluate, hands, leakage, sources
 
 
 # --- label + group recovery --------------------------------------------------
@@ -456,3 +456,239 @@ def test_random_stratified_split_covers_every_class_70_15_15():
         assert {r["label"] for r in rows if r["split"] == split} == set(sources.CLASSES)
     # ~70% train
     assert 0.62 < n["train"] / len(rows) < 0.78
+def test_gradient_accumulation_preserves_final_partial_optimizer_step():
+    """Catch dropping or underweighting the last microbatches of an epoch."""
+    from slr import train
+
+    assert [train._accumulation_group_size(i, total=8, accumulate=3)
+            for i in range(8)] == [3, 3, 3, 3, 3, 3, 2, 2]
+    assert [train._should_optimizer_step(i, total=8, accumulate=3)
+            for i in range(8)] == [False, False, True, False, False, True, False, True]
+
+
+# --- hand cropping -----------------------------------------------------------
+
+def test_hand_box_is_square_margined_and_inside_the_frame():
+    """The geometry runs on every cropped image and needs no detector to check.
+
+    A box that leaves the frame produces a PIL crop padded with black, which is
+    a background cue of exactly the kind this module exists to delete.
+    """
+    w, h = 200, 150
+    for pts in ([(90, 70), (110, 80)],          # centred, small
+                [(2, 2), (30, 40)],             # jammed into the top-left
+                [(190, 140), (199, 149)],       # jammed into the bottom-right
+                [(0, 0), (199, 149)]):          # fills the whole frame
+        l, t, r, b = hands._box(pts, w, h)
+        assert 0 <= l < r <= w and 0 <= t < b <= h, f"{pts} -> box escapes the frame"
+        assert (r - l) == (b - t), f"{pts} -> box is not square"
+
+    # The margin is real: a 20px-wide landmark cloud must yield a wider box.
+    l, t, r, b = hands._box([(90, 70), (110, 80)], w, h)
+    assert r - l > 20 * (1 + hands.MARGIN) - 1
+
+
+def test_cropped_paths_mirror_the_corpus_tree_without_collisions():
+    """Two images with the same filename in different corpora must not collide."""
+    out = Path("/crops")
+    a = {"path": str(sources.DEFAULT_ROOT / "asl_alphabet" / "A" / "A1.jpg"),
+         "source": "asl_alphabet"}
+    b = {"path": str(sources.DEFAULT_ROOT / "asl_alphabet_v2" / "A" / "A1.jpg"),
+         "source": "asl_alphabet_v2"}
+    pa, pb = hands._out_path(a, out), hands._out_path(b, out)
+    assert pa != pb
+    assert pa == out / "asl_alphabet" / "A" / "A1.jpg"
+    # Paths outside the dataset root (a one-off photo) still land somewhere sane.
+    odd = {"path": "/tmp/somewhere/x.png", "source": "mine"}
+    assert hands._out_path(odd, out) == out / "mine" / "x.jpg"
+
+
+@pytest.mark.skipif(not hands.available(),
+                    reason="pip install 'slr[vision]' to exercise the detector")
+def test_crop_finds_a_hand_and_falls_back_without_one():
+    """End to end on one real photo, plus the miss case that must not raise.
+
+    The fallback matters more than the hit: `slr.api` calls this on every
+    incoming frame, and a detector that raised on a blank wall would take the
+    service down instead of returning a low-confidence letter.
+    """
+    blank, _ = hands.crop(Image.new("RGB", (200, 200), (128, 128, 128)))
+    assert blank.size == (200, 200), "a miss must return the image untouched"
+    assert hands.crop(Image.new("RGB", (200, 200), (128, 128, 128)))[1] is False
+
+    real = sorted((sources.DEFAULT_ROOT / "asl_alphabet_test").rglob("*.jpg"))[:1]
+    if not real:
+        pytest.skip("no downloaded corpus to detect a real hand in")
+    img, found = hands.crop(Image.open(real[0]))
+    if found:
+        assert img.size[0] <= Image.open(real[0]).size[0]
+        assert img.size[0] == img.size[1]
+
+
+# --- landmark classifier -----------------------------------------------------
+
+def test_landmark_normalisation_erases_camera_distance_and_position():
+    """The property the cross-corpus result rests on.
+
+    A landmark model transfers because the features cannot encode how far away
+    the signer stood or where in frame their hand was. If this ever stops
+    holding, the 90% cross-corpus number stops meaning what it claims.
+    """
+    from slr import landmarks as L
+
+    rng = np.random.RandomState(0)
+    lm = rng.rand(6, 21, 3).astype("float32") * 200
+
+    n = L.normalise(lm)
+    assert np.allclose(n[:, L.WRIST], 0), "wrist must sit at the origin"
+    assert np.allclose(np.linalg.norm(n[:, L.MIDDLE_MCP], axis=-1), 1), \
+        "palm length must normalise to 1"
+
+    moved = lm * 3.7 + np.array([50, -20, 5], dtype="float32")
+    assert np.allclose(L.features(lm), L.features(moved), atol=1e-4), \
+        "features must survive a scale change and a translation unchanged"
+
+    assert L.features(lm).shape == (6, L.FEATURE_DIM)
+    assert L.features(lm[0]).shape == (1, L.FEATURE_DIM)
+
+
+def test_rotation_normalisation_actually_removes_rotation():
+    """`rotate=True` is cited in the docstring as measurably worse than leaving
+    orientation in. That comparison only means anything if the switch does what
+    it says, and a sign error here silently turns it into a no-op that gets
+    written up as evidence.
+    """
+    from slr import landmarks as L
+
+    lm = np.random.RandomState(1).rand(5, 21, 3).astype("float32") * 100
+    spin = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]], dtype="float32")
+
+    r = L.normalise(lm, rotate=True)
+    assert np.allclose(r[:, L.MIDDLE_MCP, 0], 0, atol=1e-5), "palm axis is not on +y"
+    assert (r[:, L.MIDDLE_MCP, 1] > 0).all(), "palm axis points the wrong way"
+
+    assert np.allclose(L.features(lm, rotate=True),
+                       L.features(lm @ spin, rotate=True), atol=1e-4), \
+        "rotate=True must be invariant to spinning the hand in-plane"
+    assert not np.allclose(L.features(lm), L.features(lm @ spin), atol=1e-4), \
+        "rotate=False must keep orientation - it is what separates G/H from D/U"
+
+
+def test_no_landmarks_predicts_nothing():
+    """`nothing` is answered by the detector's silence, not by the classifier.
+
+    The classifier has no `nothing` class to predict - those frames hold no hand
+    and so produce no features - so this fallback is the only thing standing
+    between an empty room and a confidently wrong letter.
+    """
+    from slr import landmarks as L
+
+    classes = ["A", "B", "C"]
+    net = L.build(len(classes))
+    mu, sd = np.zeros(L.FEATURE_DIM), np.ones(L.FEATURE_DIM)
+    lm = np.random.RandomState(0).rand(4, 21, 3).astype("float32") * 100
+    found = np.array([True, False, True, False])
+
+    pred = L.predict(net, mu, sd, classes, lm, found)
+    assert list(pred[~found]) == ["nothing", "nothing"]
+    assert all(p in classes for p in pred[found]), "found hands get a real class"
+
+
+def test_score_matches_hand_computed_f1():
+    from slr import landmarks as L
+
+    truth = np.array(["A", "A", "B", "B", "nothing"])
+    pred = np.array(["A", "B", "B", "B", "nothing"])
+    s = L.score(pred, truth)
+    assert s["acc"] == pytest.approx(4 / 5)
+    # A: tp=1 fp=0 fn=1 -> 2/3.  B: tp=2 fp=1 fn=0 -> 4/5.  nothing: 1.0
+    assert s["per_class_f1"]["A"] == pytest.approx(2 / 3)
+    assert s["per_class_f1"]["B"] == pytest.approx(4 / 5)
+    assert s["macro_f1"] == pytest.approx((2 / 3 + 4 / 5 + 1.0) / 3)
+
+
+@pytest.mark.skipif(not hands.available(),
+                    reason="pip install 'slr[vision]' to exercise the detector")
+def test_landmarks_are_pixels_inside_the_frame_and_agree_with_the_box():
+    """`detect` is defined as `_box(landmarks(...))`; check they cannot drift.
+
+    Landmarks are returned in pixels rather than MediaPipe's normalised
+    coordinates precisely so a non-square photo does not squash the hand, so the
+    bounds check here is also the check on that decision.
+    """
+    from slr import landmarks as L
+
+    real = sorted((sources.DEFAULT_ROOT / "asl_alphabet_test").rglob("*.jpg"))[:1]
+    if not real:
+        pytest.skip("no downloaded corpus to detect a real hand in")
+    arr = np.asarray(Image.open(real[0]).convert("RGB"))
+    lm = hands.landmarks(arr)
+    if lm is None:
+        pytest.skip("detector found no hand in the sampled image")
+
+    h, w = arr.shape[:2]
+    assert lm.shape == (21, 3)
+    assert (lm[:, 0] > -w).all() and (lm[:, 0] < 2 * w).all(), "x is not in pixels"
+    assert (lm[:, 1] > -h).all() and (lm[:, 1] < 2 * h).all(), "y is not in pixels"
+
+    box = hands.detect(arr)
+    assert box is not None, "landmarks found but detect returned no box"
+    assert box == hands._box([(x, y) for x, y, _ in lm], w, h)
+    assert L.features(lm).shape == (1, L.FEATURE_DIM)
+
+
+def test_left_hands_fold_onto_the_right_handed_frame():
+    """A left hand must produce the features of the right hand it mirrors.
+
+    This is the whole fix for left-handed signers, and it is invisible to the
+    benchmark: asl_alphabet is 91% right hands and asl_alphabet_test 98%, so
+    both corpora agree with each other and disagree with half the population.
+    Twelve photos from a left-handed signer scored 2/12 before the fold and
+    9/12 after.
+    """
+    from slr import landmarks as L
+
+    lm = np.random.RandomState(4).rand(5, 21, 3).astype("float32") * 100
+    mirrored = lm.copy()
+    mirrored[:, :, 0] *= -1
+
+    assert np.allclose(L.features(lm, "Right"), L.features(mirrored, "Left"),
+                       atol=1e-5), "a left hand must fold onto the right it mirrors"
+    assert not np.allclose(L.features(lm, "Right"), L.features(mirrored, "Right"),
+                           atol=1e-5), "without the fold the two must differ"
+
+    # Per-row handedness, which is how a whole cache is folded at once.
+    side = np.array(["Right", "Left", "Right", "Left", "Right"])
+    mixed = np.where(side[:, None, None] == "Left", mirrored, lm)
+    assert np.allclose(L.features(mixed, side), L.features(lm, "Right"), atol=1e-5)
+
+
+def test_unknown_handedness_is_treated_as_right():
+    """Plain arrays and pre-fold caches must behave exactly as they used to."""
+    from slr import landmarks as L
+
+    lm = np.random.RandomState(5).rand(3, 21, 3).astype("float32") * 100
+    assert np.allclose(L.features(lm), L.features(lm, "Right"))
+    assert not L.canonical_side(lm).any()
+
+
+@pytest.mark.skipif(not hands.available(),
+                    reason="pip install 'slr[vision]' to exercise the detector")
+def test_detector_reports_which_hand_it_found():
+    from slr import landmarks as L
+
+    real = sorted((sources.DEFAULT_ROOT / "asl_alphabet_test").rglob("*.jpg"))[:1]
+    if not real:
+        pytest.skip("no downloaded corpus")
+    got = hands.detect_hand(np.asarray(Image.open(real[0]).convert("RGB")))
+    if got is None:
+        pytest.skip("no hand in the sampled image")
+    lm, side = got
+    assert side in ("Left", "Right")
+    assert lm.shape == (21, 3)
+    # The pair must survive a pickle: it rides through a process pool into the
+    # cache, and an attribute that silently reset to "Right" there would mark
+    # every hand right-handed and undo the fold without any error.
+    import pickle
+    assert pickle.loads(pickle.dumps(got))[1] == side
+    assert hands.landmarks(np.asarray(Image.open(real[0]).convert("RGB"))).shape == (21, 3)

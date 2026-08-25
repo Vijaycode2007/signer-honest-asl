@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
-from . import data, model as M
+from . import data, hands, landmarks as LM, model as M
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 STATE: dict = {}
@@ -38,6 +38,9 @@ class Prediction(BaseModel):
     abstain: bool
     top_k: list[dict]
     latency_ms: float
+    hand_detected: bool | None = None
+    model: str = "pixel"
+    landmark: dict | None = None
     attention_png_b64: str | None = None
 
 
@@ -68,8 +71,36 @@ def _load() -> None:
     else:
         print(f"[api] no eval report at {report}; confidences are UNCALIBRATED")
 
-    STATE.update(net=net, dev=dev, classes=blob["classes"], temp=temp,
-                 threshold=thresh, preset=blob["preset"],
+    # Serve the way the model was trained. A crop-trained model fed a whole
+    # room is a different problem than the one it was fitted to, and the gap
+    # shows up as confident nonsense rather than as an error.
+    crop = bool(blob.get("hand_crop"))
+    if crop and not hands.available():
+        print("[api] WARNING: checkpoint was trained on hand crops but mediapipe "
+              "is not installed here. Serving uncropped photos to a crop-trained "
+              "model - accuracy will be materially worse. pip install 'slr[vision]'")
+        crop = False
+    elif crop:
+        hands.model_path()                 # fetch the landmarker before traffic
+        print("[api] hand cropping enabled")
+
+    # The landmark model is optional and tiny (368 KB), and it is loaded beside
+    # the pixel model rather than instead of it so the same photo can be put to
+    # both. On the cross-corpus test it scores 0.902 macro-F1 against the pixel
+    # model's 0.568, which is a large enough gap that it should be easy to check
+    # on real input rather than taken on trust.
+    lm_path = Path(os.environ.get("SLR_LANDMARK", ckpt.parent.parent / "landmark.pt"))
+    lm_model = None
+    if lm_path.exists() and hands.available():
+        lm_model = LM.load_model(lm_path)
+        print(f"[api] landmark model from {lm_path}: {len(lm_model.classes)} classes, "
+              f"fusing at w={lm_model.weight:.3f}")
+    elif lm_path.exists():
+        print(f"[api] landmark model at {lm_path} needs mediapipe; not loaded")
+
+    STATE.update(lm=lm_model,
+                 net=net, dev=dev, classes=blob["classes"], temp=temp,
+                 threshold=thresh, preset=blob["preset"], crop=crop,
                  tf=data.build_transforms(blob["img_size"], train=False),
                  img_size=blob["img_size"], ckpt=str(ckpt))
 
@@ -98,6 +129,9 @@ def health() -> dict:
         "n_classes": len(STATE.get("classes", [])),
         "temperature": STATE.get("temp"),
         "abstain_below": STATE.get("threshold"),
+        "hand_crop": STATE.get("crop"),
+        "landmark_model": STATE.get("lm") is not None,
+        "fusion_weight": None if STATE.get("lm") is None else STATE["lm"].weight,
     }
 
 
@@ -134,16 +168,65 @@ async def predict(
     image: UploadFile = File(..., description="a photo of one hand making one sign"),
     top_k: int = Query(3, ge=1, le=10),
     explain: bool = Query(False, description="also return an attention heatmap"),
+    model: str = Query("fused", pattern="^(fused|pixel|landmark|both)$",
+                       description="'fused' (default) blends the two at the "
+                                   "measured weight; 'pixel' and 'landmark' "
+                                   "isolate one; 'both' answers with pixel and "
+                                   "attaches the landmark result for comparison"),
 ) -> Prediction:
     if not STATE:
         raise HTTPException(503, "model not loaded")
     t0 = time.perf_counter()
     img = _decode(await image.read())
 
+    if model != "pixel" and STATE["lm"] is None:
+        raise HTTPException(
+            503, "no landmark model loaded. Train one with `python -m slr.landmarks "
+                 "train <cache>` and point SLR_LANDMARK at it, or install mediapipe.")
+
+    lm_out = None
+    if model in ("landmark", "both", "fused"):
+        import numpy as np
+        lm_out = LM.predict_one(STATE["lm"], np.asarray(img), top_k)
+        if model == "landmark":
+            return Prediction(
+                label=lm_out["label"],
+                confidence=lm_out["confidence"] or 0.0,
+                # Uncalibrated, so there is no measured threshold to abstain on.
+                # Saying "not sure" needs a number whose error rate is known, and
+                # this model does not have one yet.
+                abstain=False,
+                top_k=lm_out["top_k"],
+                latency_ms=round((time.perf_counter() - t0) * 1000, 2),
+                hand_detected=lm_out["hand_detected"],
+                model="landmark",
+            )
+
+    found = None
+    if STATE["crop"]:
+        img, found = hands.crop(img)
+        # Deliberately not an abstain. Detection misses roughly one honest photo
+        # in seven on tightly framed input, and the training set carries the same
+        # uncropped minority, so a miss is a degraded prediction rather than an
+        # invalid one. The flag lets the app say "move your hand into frame"
+        # without the API refusing to answer.
+
     x = STATE["tf"](img).unsqueeze(0).to(STATE["dev"])
     with torch.no_grad():
         logits = STATE["net"](x).float()
     probs = (logits / STATE["temp"]).softmax(1)[0]
+
+    if model == "fused":
+        # Both models vote on the same 29 slots, at the weight measured on a
+        # leakage-free half of the holdout corpus. The blend is worth little
+        # accuracy over landmarks alone (0.9034 -> 0.9080) and a great deal of
+        # log-loss (0.6985 -> 0.4263), which is the half that matters here: the
+        # abstention threshold is read off a confidence, so a better-calibrated
+        # confidence is a better-placed refusal.
+        import numpy as np
+        lm_p, _, _ = LM.probs(STATE["lm"], np.asarray(img), STATE["classes"])
+        blended = LM.fuse(probs.cpu().numpy(), lm_p, STATE["lm"].weight)
+        probs = torch.tensor(blended, dtype=torch.float32)
 
     k = min(top_k, probs.numel())
     vals, idx = probs.topk(k)
@@ -161,6 +244,10 @@ async def predict(
         top_k=[{"label": STATE["classes"][int(i)], "p": round(float(v), 4)}
                for v, i in zip(vals, idx)],
         latency_ms=round((time.perf_counter() - t0) * 1000, 2),
+        hand_detected=found if found is not None else (
+            lm_out["hand_detected"] if lm_out else None),
+        model=model if lm_out else "pixel",
+        landmark=lm_out,
         attention_png_b64=heat,
     )
 

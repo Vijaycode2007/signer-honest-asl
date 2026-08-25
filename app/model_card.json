@@ -1,0 +1,67 @@
+{
+  "model": {
+    "name": "DeiT III base + per-finger geometry",
+    "preset": "deit3_base",
+    "timm_name": "deit3_base_patch16_224.fb_in22k_ft_in1k",
+    "params_m": 85.84,
+    "img_size": 224,
+    "n_classes": 29,
+    "selected_on": "architecture validation macro-F1, then constrained cross-corpus fusion tuning",
+    "val_f1": 0.9456,
+    "val_acc": 0.8957,
+    "fusion": { "pixel_weight": 0.62, "geometry_weight": 0.38 },
+    "note": "DeiT III was chosen by validation-only architecture search. The 62:38 fusion ratio was selected on 522 group-disjoint cross-corpus tuning photos, then reported on 1,218 untouched photos."
+  },
+  "protocols": [
+    {
+      "id": "A",
+      "name": "Random split",
+      "headline": "Testing it the sloppy way",
+      "test_acc": 1.0,
+      "test_f1": 1.0,
+      "leak_rate": 0.9914,
+      "exact_duplicates": 643,
+      "measured_on": "deit3_base + per_finger_geometry",
+      "explain": "Frames shuffled at random. 99.14% of the test photos were near-copies of training photos and 643 were exact duplicates, so the model was grading its own memory. This is how most published sign-language numbers are produced."
+    },
+    {
+      "id": "B",
+      "name": "Group split",
+      "headline": "A new recording session",
+      "test_acc": 0.7196,
+      "test_f1": 0.8135,
+      "leak_rate": 0.005,
+      "exact_duplicates": 0,
+      "measured_on": "deit3_base + per_finger_geometry",
+      "explain": "Whole capture sessions dealt to one side of the split only, so no frame faces its own neighbour across the boundary."
+    },
+    {
+      "id": "C",
+      "name": "Cross-corpus",
+      "headline": "A stranger, a new room, a new camera",
+      "test_acc": 0.8062,
+      "test_f1": 0.797,
+      "leak_rate": 0.0,
+      "exact_duplicates": 0,
+      "measured_on": "deit3_base + per_finger_geometry",
+      "explain": "Trained on one corpus, tested on another shot by different people in a different room with a different camera. The ratio was chosen on a separate group-disjoint tuning partition; this score is from the untouched 1,218-photo final partition.",
+      "is_headline_number": true
+    }
+  ],
+  "attribution": "All three figures measure the selected 62% pixel / 38% per-finger geometry strategy. Protocol C gained 14.0 macro-F1 points over pixels on its untouched final partition; the twelve personal photos were kept test-only and were not used to choose the ratio.",
+  "leaderboard": [
+    { "preset": "deit3_base", "name": "DeiT III base", "family": "vit", "params_m": 85.84, "val_f1": 0.9456, "winner": true },
+    { "preset": "vit_base", "name": "ViT base", "family": "vit", "params_m": 85.82, "val_f1": 0.9128, "winner": false },
+    { "preset": "beitv2_base", "name": "BEiT v2 base", "family": "vit", "params_m": 85.78, "val_f1": 0.908, "winner": false },
+    { "preset": "vit_small", "name": "ViT small", "family": "vit", "params_m": 21.68, "val_f1": 0.8939, "winner": false },
+    { "preset": "clip_base", "name": "CLIP base", "family": "vit", "params_m": 85.82, "val_f1": 0.8886, "winner": false },
+    { "preset": "effnetv2_s", "name": "EfficientNetV2 S", "family": "cnn", "params_m": 20.21, "val_f1": 0.8426, "winner": false }
+  ],
+  "leaderboard_note": "Validation macro-F1 over 4 epochs, Protocol C training data. Two further candidates (ViT tiny, EfficientFormer S2) failed to train at this data size and are not architecture findings.",
+  "abstention": "A wrong letter announced confidently is worse than no letter at all. Confidences are temperature-scaled on the validation split, and anything below the measured threshold is refused rather than guessed. The threshold is the one that answers roughly nine photos in ten.",
+  "limits": [
+    "Reads fingerspelling only: single static hand shapes, one letter at a time.",
+    "Cannot read whole-word signs, facial grammar, or movement.",
+    "Not a substitute for a human interpreter."
+  ]
+}

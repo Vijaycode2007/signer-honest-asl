@@ -31,7 +31,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from . import data, model as M, sources
+from . import data, hands, model as M, sources
 
 
 @torch.no_grad()
@@ -130,6 +130,15 @@ def run(ckpt: Path, manifest: Path, out: Path, workers: int = 4) -> dict:
     net.load_state_dict(blob["state_dict"])
 
     rows = sources.read_manifest(manifest)
+    # A crop-trained model scored on uncropped images (or the reverse) produces a
+    # real number for a pipeline nobody will ever run. Loud, because the result
+    # looks perfectly plausible - just several points off, in whichever direction
+    # flatters the mistake.
+    cropped = all(str(hands.CROP_ROOT) in r["path"] for r in rows)
+    if cropped != bool(blob.get("hand_crop")):
+        print(f"[eval] WARNING: checkpoint hand_crop={bool(blob.get('hand_crop'))} "
+              f"but this manifest is {'cropped' if cropped else 'uncropped'}. "
+              f"Train and eval preprocessing disagree; this number is not comparable.")
     dl = data.loaders(rows, blob["img_size"], M.PRESETS[blob["preset"]].batch_size, workers)
 
     temp = 1.0

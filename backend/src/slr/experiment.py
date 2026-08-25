@@ -7,6 +7,8 @@ analysis into a browser.
 Stages, in order:
 
     data   download the corpora, build the manifest, recover session groups
+           (`crop=True` additionally mirrors every image to its hand box, and
+           every stage after it then runs on crops)
     A      random split          - what the literature reports
     B      group split           - sessions kept whole
     C      cross-corpus          - tested on a corpus with different signers
@@ -32,7 +34,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import data, evaluate, leakage, model as M, sources, train
+from . import data, evaluate, hands, leakage, model as M, sources, train
 
 RUNS = Path("runs")
 RESULTS = RUNS / "results.json"
@@ -165,7 +167,15 @@ def subsample(rows: list[dict], per_class: int, seed: int = 0) -> list[dict]:
 
 # --- stages ------------------------------------------------------------------
 
-def stage_data(per_class: int = 0, max_dist: int = 6) -> dict:
+def stage_data(per_class: int = 0, max_dist: int = 6, crop: bool = False) -> dict:
+    """Build the manifest every other stage reads.
+
+    `crop=True` mirrors the corpora to their hand boxes and points the manifest
+    at the mirror, which is the whole switch: A, B, C, arch and cal all read
+    MANIFEST, so one flag here decides what the entire experiment is run on.
+    Re-running without the flag puts it back. Running both and comparing the two
+    protocol-C numbers is what says whether cropping was worth anything.
+    """
     for name in (TRAIN_CORPUS, TEST_CORPUS):
         sources.download(name)
 
@@ -186,6 +196,12 @@ def stage_data(per_class: int = 0, max_dist: int = 6) -> dict:
         "classes": len({r["label"] for r in rows}),
         "recovery_seconds": round(time.time() - t0, 1),
     }
+    if crop:
+        rows, det = hands.crop_manifest(rows, workers=8)
+        sources.write_manifest([{k: r[k] for k in sources.MANIFEST_COLS} for r in rows],
+                               MANIFEST)
+        summary["hand_crop"] = det
+    summary["cropped"] = crop
     print(f"[data] {summary}")
     return summary
 
@@ -267,14 +283,20 @@ def stage_cal(winner: str, per_class: int, workers: int = 2) -> dict:
 
 # --- driver ------------------------------------------------------------------
 
+def cropped_manifest() -> bool:
+    """Whether MANIFEST currently points at hand crops."""
+    rows = sources.read_manifest(MANIFEST) if MANIFEST.exists() else []
+    return bool(rows) and all(str(hands.CROP_ROOT) in r["path"] for r in rows)
+
+
 def run(stage: str, per_class: int = 400, preset: str = "vit_small", epochs: int = 4,
         presets: list[str] | None = None, winner: str = "vit_small",
-        workers: int = 2) -> dict:
+        workers: int = 2, crop: bool = False) -> dict:
     state = load()
     t0 = time.time()
 
     if stage == "data":
-        out = stage_data(per_class)
+        out = stage_data(per_class, crop=crop)
     elif stage == "A":
         out = stage_A(per_class, preset, epochs, workers)
     elif stage == "B":
@@ -289,7 +311,11 @@ def run(stage: str, per_class: int = 400, preset: str = "vit_small", epochs: int
         raise ValueError(f"unknown stage {stage}")
 
     out["seconds"] = round(time.time() - t0, 1)
-    state["stages"][stage] = out
+    # Cropped and uncropped results are the same protocol on different input, so
+    # they get their own slots rather than overwriting each other - the point of
+    # running both is to put the two numbers side by side.
+    key = f"{stage}_crop" if (crop or cropped_manifest()) else stage
+    state["stages"][key] = out
     save(state)
     print(f"\n[{stage}] done in {out['seconds']}s")
     return out
@@ -301,7 +327,10 @@ def summary() -> str:
     lines = ["", f"{'protocol':<34}{'test acc':>10}{'macro F1':>10}{'leakage':>10}", "-" * 64]
     names = {"A": "A  random split (as published)",
              "B": "B  group split (sessions whole)",
-             "C": "C  cross-corpus (new signer)"}
+             "C": "C  cross-corpus (new signer)",
+             "A_crop": "A  random split, hand-cropped",
+             "B_crop": "B  group split, hand-cropped",
+             "C_crop": "C  cross-corpus, hand-cropped"}
     for k, label in names.items():
         r = s.get(k)
         if not r:
@@ -312,6 +341,9 @@ def summary() -> str:
         d = s["A"]["test_acc"] - s["C"]["test_acc"]
         lines += ["-" * 64,
                   f"A minus C = {d:.1%} of the published headline was leakage, not skill."]
+    if "C" in s and "C_crop" in s:
+        d = s["C_crop"]["test_acc"] - s["C"]["test_acc"]
+        lines.append(f"cropping moved the honest number by {d:+.1%}.")
     out = "\n".join(lines)
     print(out)
     return out

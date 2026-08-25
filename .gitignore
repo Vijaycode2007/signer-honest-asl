@@ -1,6 +1,9 @@
 # data + artifacts, never commit
 dataset/raw/
 dataset/manifests/
+dataset/crops/
+dataset/landmarks/
+dataset/models/
 docs/pdf/
 runs/
 *.pt

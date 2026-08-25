@@ -17,6 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 data = ["kaggle>=1.6", "huggingface-hub>=0.23"]
+# mediapipe 1.x removed the legacy solutions API and its Tasks hand landmarker
+# aborts on macOS arm64 (DrishtiMetalHelper: "Service is unavailable"), which is
+# the machine this API is served from. Pinned below 1 until that is fixed.
+vision = ["mediapipe>=0.10.14,<1", "opencv-contrib-python>=4.9"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]

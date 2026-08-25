@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #FAF6F0; font-family: Figtree, "Segoe UI", system-ui, sans-serif; }
+    a { color: #B4603F; text-decoration: none; }
+    a:hover { color: #8E4830; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 390px; background: #FAF6F0; color: #2E2823;">
+
+  <!-- header -->
+  <div style="display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px 20px;">
+    <button style="width: 36px; height: 36px; border: 1px solid #E9E0D5; background: #FFFFFF; border-radius: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex-shrink: 0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2823" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 5l-7 7 7 7"></path>
+      </svg>
+    </button>
+    <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; font-weight: 500;">How it works</span>
+  </div>
+
+  <div style="padding: 0 20px 32px 20px; display: flex; flex-direction: column; gap: 14px;">
+
+    <!-- lede -->
+    <p style="font-family: Newsreader, Georgia, serif; font-size: 25px; line-height: 1.32; margin: 6px 0 0 0; letter-spacing: -0.01em; text-wrap: pretty;">This app reads fingerspelling, one letter at a time.</p>
+    <p style="font-size: 15px; line-height: 1.55; margin: 0; color: #736A60; text-wrap: pretty;">Photograph a hand shape and it guesses which of 29 signs you made: the letters A to Z, plus space, delete, and nothing. It cannot read whole-word signs, facial grammar, or movement.</p>
+
+    <!-- honesty card -->
+    <div style="background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(80,60,40,0.04); margin-top: 4px;">
+      <div style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A9A096; margin-bottom: 10px;">How often is it right?</div>
+      <p style="font-family: Newsreader, Georgia, serif; font-size: 20px; line-height: 1.35; margin: 0 0 14px 0; text-wrap: pretty;">It depends entirely on who is signing - and most apps don't tell you that.</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+
+        <div style="display: flex; gap: 13px; align-items: flex-start;">
+          <div style="width: 58px; flex-shrink: 0; text-align: right;">
+            <div style="font-family: Newsreader, Georgia, serif; font-size: 25px; line-height: 1; color: #C4BBB0;">100%</div>
+          </div>
+          <div style="flex-grow: 1; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid #F0E9DF;">
+            <div style="font-size: 14.5px; font-weight: 600; margin-bottom: 2px; color: #A9A096;">Testing it the sloppy way</div>
+            <div style="font-size: 13.5px; line-height: 1.45; color: #A9A096;">Nearly every published number looks like this. 99% of the test photos were near-copies of training photos, so it was grading its own memory.</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 13px; align-items: flex-start;">
+          <div style="width: 58px; flex-shrink: 0; text-align: right;">
+            <div style="font-family: Newsreader, Georgia, serif; font-size: 25px; line-height: 1; color: #2E2823;">63%</div>
+          </div>
+          <div style="flex-grow: 1; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid #F0E9DF;">
+            <div style="font-size: 14.5px; font-weight: 600; margin-bottom: 2px;">A new recording session</div>
+            <div style="font-size: 13.5px; line-height: 1.45; color: #736A60;">Same people, but photos it has never seen. This is closer to honest.</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 13px; align-items: flex-start;">
+          <div style="width: 58px; flex-shrink: 0; text-align: right;">
+            <div style="font-family: Newsreader, Georgia, serif; font-size: 25px; line-height: 1; color: {{accent}};">61%</div>
+          </div>
+          <div style="flex-grow: 1; min-width: 0;">
+            <div style="font-size: 14.5px; font-weight: 600; margin-bottom: 2px;">A stranger, a new room, a new camera</div>
+            <div style="font-size: 13.5px; line-height: 1.45; color: #736A60;">This is you. Expect roughly three letters right out of every five on a first try - better once you learn the lighting it likes.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 14px; padding: 12px 13px; background: #FAF6F0; border-radius: 12px;">
+        <div style="font-size: 12.5px; line-height: 1.5; color: #8E857A; text-wrap: pretty;">Measured on the ViT-Small baseline, which is the version that has been through the full honest test. The current model scores higher in development but has not been through that final test yet, so we quote the number we actually measured.</div>
+      </div>
+    </div>
+
+    <!-- why unsure -->
+    <div style="background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(80,60,40,0.04);">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 9px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z"></path>
+          <path d="M9.4 9.3a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.3-2.6 2.3"></path>
+          <path d="M12 16.6h.01"></path>
+        </svg>
+        <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; font-weight: 500;">Why it sometimes refuses</span>
+      </div>
+      <p style="font-size: 14.5px; line-height: 1.55; margin: 0; color: #736A60; text-wrap: pretty;">A wrong letter announced confidently is worse than no letter at all. When the model's own confidence falls below <strong style="color: #2E2823; font-weight: 600;">{{threshText}}</strong>, it says nothing rather than guess. That cut-off isn't a guess either - it was measured, and at that setting it answers about nine photos in ten.</p>
+    </div>
+
+    <!-- model -->
+    <div style="background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(80,60,40,0.04);">
+      <div style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A9A096; margin-bottom: 11px;">What's under the hood</div>
+      <div style="font-family: Newsreader, Georgia, serif; font-size: 21px; line-height: 1.25; margin-bottom: 3px;">DeiT III, base</div>
+      <div style="font-size: 13.5px; color: #736A60; margin-bottom: 14px;">A vision transformer, 86 million parameters, reading a 224-pixel square.</div>
+
+      <div style="font-size: 13px; color: #A9A096; margin-bottom: 8px;">It won a run-off against seven other designs:</div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <sc-for list="{{board}}" as="row" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 13.5px; font-weight: 500; width: 108px; flex-shrink: 0; color: {{row.ink}};">{{row.name}}</span>
+            <div style="flex-grow: 1; height: 6px; border-radius: 3px; background: #F0E9DF; overflow: hidden;">
+              <div style="height: 100%; width: {{row.pct}}; border-radius: 3px; background: {{row.bar}};"></div>
+            </div>
+            <span style="font-size: 12.5px; width: 34px; text-align: right; flex-shrink: 0; color: {{row.ink}};">{{row.score}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size: 12px; line-height: 1.5; color: #A9A096; margin-top: 11px;">Development scores, not the honest test above. The run-off was decided before the final test was ever opened.</div>
+    </div>
+
+    <!-- alphabet -->
+    <div style="background: #FFFFFF; border: 1px solid #E9E0D5; border-radius: 18px; padding: 18px; box-shadow: 0 1px 2px rgba(80,60,40,0.04);">
+      <div style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A9A096; margin-bottom: 12px;">The 29 signs it knows</div>
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;">
+        <sc-for list="{{letters}}" as="ch" hint-placeholder-count="26">
+          <div style="aspect-ratio: 1; border-radius: 9px; background: #FAF6F0; display: flex; align-items: center; justify-content: center;">
+            <span style="font-family: Newsreader, Georgia, serif; font-size: 16px; color: #2E2823;">{{ch.c}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; gap: 6px; margin-top: 6px;">
+        <sc-for list="{{special}}" as="sp" hint-placeholder-count="3">
+          <div style="flex-grow: 1; border-radius: 9px; background: #FAF6F0; padding: 9px 0; display: flex; align-items: center; justify-content: center;">
+            <span style="font-size: 12.5px; font-weight: 500; color: #736A60;">{{sp.c}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <p style="font-size: 12.5px; line-height: 1.55; color: #A9A096; margin: 4px 2px 0 2px; text-wrap: pretty;">Not a substitute for a human interpreter. Nothing you photograph leaves your device except the single frame sent for recognition, which is not stored.</p>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#B4603F","options":["#B4603F","#4A8464","#2E2823","#8E4830"],"section":"Look"},"threshold":{"editor":"range","default":0.61,"min":0.3,"max":0.95,"step":0.01,"section":"Behaviour"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var accent = this.props.accent || '#B4603F';
+    var thresh = this.props.threshold == null ? 0.61 : this.props.threshold;
+    var sage = '#4A8464';
+
+    var raw = [
+      ['DeiT III base', 0.946, true],
+      ['ViT base', 0.913, false],
+      ['BEiT v2 base', 0.908, false],
+      ['ViT small', 0.894, false],
+      ['CLIP base', 0.889, false],
+      ['EfficientNetV2 S', 0.843, false]
+    ];
+
+    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(function (c) {
+      return { c: c };
+    });
+
+    return {
+      accent: accent,
+      threshText: Math.round(thresh * 100) + '%',
+      board: raw.map(function (r) {
+        return {
+          name: r[0],
+          score: Math.round(r[1] * 100) + '',
+          pct: Math.round(((r[1] - 0.80) / 0.16) * 100) + '%',
+          bar: r[2] ? sage : '#DDD4C8',
+          ink: r[2] ? '#2E2823' : '#A9A096'
+        };
+      }),
+      letters: letters,
+      special: [{ c: 'space' }, { c: 'delete' }, { c: 'nothing' }]
+    };
+  }
+}
+</script>
+</body>
+</html>

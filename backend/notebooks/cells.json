@@ -61,7 +61,15 @@
  ],
  [
   "md",
-  "## 7. The headline table"
+  "## 7. Protocol C again, on hand crops\n\n`slr.hands` mirrors every image to the box MediaPipe puts round the hand and points the\nmanifest at the mirror, so this is the same protocol, the same architecture and the same\nepochs on differently framed pixels.\n\nDetection is reported over the whole corpus rather than a sample: 71,717 of 87,000 on\n`asl_alphabet` (82.4%) and 1,658 of 1,740 on `asl_alphabet_test` (95.3%). Three thousand\nof the misses are the `nothing` class, which holds no hand to find and should stay\nuncropped; the rest pass through uncropped too, rather than being dropped.\n\nCropping is the direct attack on the background shortcut protocols A and B expose, so the\nnumber to read is C_crop against C. Every stage from here on runs on crops, until\n`experiment.run(\"data\", per_class=0)` is re-run without the flag."
+ ],
+ [
+  "code",
+  "# Installed here rather than in cell 1 so the three protocols above never depend\n# on it: mediapipe pins protobuf, and a pin that fights Colab's is a restart the\n# rest of the notebook should not have to pay for.\n!pip install -q \"mediapipe>=0.10.14,<1\" opencv-contrib-python\n\nexperiment.run(\"data\", per_class=0, crop=True)   # ~15 min, ~0.8 GB\nexperiment.run(\"C\", per_class=PER_CLASS, preset=PRESET, epochs=EPOCHS)"
+ ],
+ [
+  "md",
+  "## 8. The headline table"
  ],
  [
   "code",
@@ -69,7 +77,7 @@
  ],
  [
   "md",
-  "## 8. Architecture search\n\nEvery backbone the reading list pointed at, ranked on validation macro-F1.\nOnly the winner is run against the test split.\n\nThe sweep is resumable: `runs/C_arch_leaderboard.json` is rewritten after each\ncandidate and re-read on restart, so a killed process costs the model in flight,\nnot the sweep. Re-run this cell and it picks up where it stopped."
+  "## 9. Architecture search\n\nEvery backbone the reading list pointed at, ranked on validation macro-F1.\nOnly the winner is run against the test split.\n\nThe sweep is resumable: `runs/C_arch_leaderboard.json` is rewritten after each\ncandidate and re-read on restart, so a killed process costs the model in flight,\nnot the sweep. Re-run this cell and it picks up where it stopped."
  ],
  [
   "code",
@@ -89,7 +97,7 @@
  ],
  [
   "md",
-  "## 9. Calibration and the abstention threshold\n\nTemperature is fitted on validation only. The risk-coverage table is where the app's\nconfidence threshold comes from: at a given coverage, this is the measured error rate\namong the answers the model is willing to give."
+  "## 10. Calibration and the abstention threshold\n\nTemperature is fitted on validation only. The risk-coverage table is where the app's\nconfidence threshold comes from: at a given coverage, this is the measured error rate\namong the answers the model is willing to give."
  ],
  [
   "code",
@@ -97,7 +105,7 @@
  ],
  [
   "md",
-  "## 10. Take the model home\n\n`slr_model.zip` holds the checkpoint plus its calibration report. Keep them together: the\nAPI reads `eval.json` from beside the `.pt` to get the temperature and threshold."
+  "## 11. Take the model home\n\n`slr_model.zip` holds the checkpoint plus its calibration report. Keep them together: the\nAPI reads `eval.json` from beside the `.pt` to get the temperature and threshold."
  ],
  [
   "code",

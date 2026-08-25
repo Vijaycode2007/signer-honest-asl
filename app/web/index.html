@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign Reader</title>
+<meta name="description" content="Reads ASL fingerspelling from a photo, one letter at a time, and says so when it isn't sure.">
+<meta name="theme-color" content="#FAF6F0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B4603F' stroke-width='1.8' stroke-linecap='round'><path d='M8 11V5.5a1.5 1.5 0 0 1 3 0V11'/><path d='M11 10.5V4.5a1.5 1.5 0 0 1 3 0V11'/><path d='M14 11V6.5a1.5 1.5 0 0 1 3 0V13'/><path d='M8 11V9.5a1.5 1.5 0 0 0-3 0v4a7 7 0 0 0 7 7h1a7 7 0 0 0 7-7v-3'/></svg>">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10.5V4.5a1.5 1.5 0 0 1 3 0V11"/>
+      <path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V13"/><path d="M8 11V9.5a1.5 1.5 0 0 0-3 0v4a7 7 0 0 0 7 7h1a7 7 0 0 0 7-7v-3"/>
+    </svg>
+    <span class="wordmark">Sign Reader</span>
+  </div>
+  <div class="bar-right">
+    <span class="bar-note">Reads fingerspelling · 29 signs</span>
+    <button type="button" class="link" id="open-about" aria-haspopup="dialog">How it works</button>
+  </div>
+</header>
+
+<div id="boot-error" class="boot-error" hidden role="alert"></div>
+
+<main class="layout">
+
+  <!-- left: the frame -->
+  <section class="stage" aria-label="Camera">
+    <div class="frame" id="frame">
+      <video id="video" playsinline muted autoplay></video>
+      <img id="shot" alt="The photo you just took" hidden>
+      <canvas id="overlay" aria-hidden="true"></canvas>
+      <canvas id="scratch" hidden></canvas>
+      <canvas id="tracker" hidden></canvas>
+
+      <div class="frame-empty" id="frame-empty">
+        <svg viewBox="0 0 140 170" class="hand" aria-hidden="true">
+          <g fill="currentColor">
+            <rect x="42" y="34" width="16" height="64" rx="8"/><rect x="62" y="24" width="16" height="74" rx="8"/>
+            <rect x="82" y="32" width="16" height="66" rx="8"/><rect x="102" y="48" width="15" height="52" rx="7.5"/>
+            <rect x="18" y="74" width="15" height="44" rx="7.5" transform="rotate(-26 25 96)"/>
+            <rect x="38" y="84" width="80" height="66" rx="27"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="chips">
+        <span class="chip" id="cam-chip"><span class="dot" id="cam-dot"></span><span id="cam-text">Starting camera</span></span>
+        <span class="chip" id="track-chip" hidden><span class="dot" id="track-dot"></span><span id="track-text">Tracking</span></span>
+      </div>
+
+      <div class="frame-hint" id="frame-hint">
+        <p class="hint-title">Hold one hand in the frame</p>
+        <p class="hint-sub">Good light, plain wall behind you.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- right: the readout -->
+  <section class="readout" aria-label="Result">
+
+    <div class="card message-card">
+      <div class="card-head">
+        <span class="eyebrow">Your message</span>
+        <div class="msg-actions">
+          <button type="button" class="btn-quiet" id="undo" title="Remove the last letter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 6H9.5a2 2 0 0 0-1.5.7L3 12l5 5.3a2 2 0 0 0 1.5.7H20a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z"/><path d="M16 10l-4 4M12 10l4 4"/>
+            </svg>
+            <span class="btn-text">Undo letter</span>
+          </button>
+          <button type="button" class="btn-quiet" id="clear">Clear</button>
+          <button type="button" class="btn-quiet" id="copy">Copy</button>
+        </div>
+      </div>
+      <div class="message" id="message" aria-live="polite"><span class="message-empty">Nothing spelled yet</span></div>
+    </div>
+
+    <div class="card result-card" id="result-card">
+      <div class="result-idle" id="result-idle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="12.7" r="3.4"/>
+        </svg>
+        <span>Take a photo to read your first letter</span>
+      </div>
+
+      <div class="result" id="result" hidden aria-live="polite">
+        <div class="result-top">
+          <div class="glyph" id="glyph"></div>
+          <div class="result-body">
+            <p class="result-phrase" id="phrase"></p>
+            <p class="result-sub" id="sub"></p>
+            <div class="meter"><div class="meter-fill" id="meter"></div></div>
+            <div class="result-meta"><span id="conf-text"></span><span id="ms"></span></div>
+          </div>
+        </div>
+        <button type="button" class="btn-quiet use-anyway" id="use-anyway" hidden>
+          Use it anyway
+        </button>
+
+        <div class="alts" id="alts" hidden>
+          <span class="alts-label">Could also be</span>
+          <div class="alts-row" id="alts-row"></div>
+        </div>
+      </div>
+    </div>
+
+    <section class="card collect" id="collect" hidden aria-label="Keep this photo">
+      <div class="card-head">
+        <span class="eyebrow">Keep this photo</span>
+        <span class="collect-count" id="collect-count"></span>
+      </div>
+      <div class="collect-row">
+        <input id="truth" class="truth" type="text" maxlength="9" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" placeholder="A"
+               aria-label="Which sign did you actually make?">
+        <button type="button" class="btn-quiet collect-save" id="save-label" disabled>Save to dataset</button>
+      </div>
+      <p class="note collect-note" id="collect-note"></p>
+    </section>
+
+    <section class="card evidence" id="evidence" hidden aria-label="Where the model looked">
+      <div class="ev-head">
+        <span class="eyebrow ev-eyebrow">Where it looked</span>
+        <span class="ev-legend"><i class="ev-dot"></i>brighter = looked harder</span>
+      </div>
+      <div class="ev-stage">
+        <img id="ev-shot" alt="The photo that was read, darkened">
+        <img id="ev-heat" alt="" aria-hidden="true">
+      </div>
+      <p class="ev-note">This is the frame the model actually read. If the glow sits on the wall or your sleeve instead of your hand, don't trust the letter.</p>
+    </section>
+
+    <div class="actions">
+      <button type="button" class="shutter" id="shutter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="12.7" r="3.4"/>
+        </svg>
+        <span id="shutter-text">Take a photo</span>
+      </button>
+      <button type="button" class="btn-quiet upload" id="upload-btn">Upload instead</button>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+  </section>
+</main>
+
+<dialog id="about" class="about">
+  <div class="about-head">
+    <span class="about-title">How it works</span>
+    <button type="button" class="btn-quiet" id="close-about" aria-label="Close">Close</button>
+  </div>
+  <div class="about-body" id="about-body"></div>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>

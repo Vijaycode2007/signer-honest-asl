@@ -8,3 +8,8 @@ pydantic>=2.6
 kaggle>=1.6
 huggingface-hub>=0.23
 pytest>=8.0
+
+# Hand detection (slr.hands). Optional: everything else runs without it.
+# Pinned below mediapipe 1.x, whose hand landmarker aborts on macOS arm64.
+mediapipe>=0.10.14,<1
+opencv-contrib-python>=4.9

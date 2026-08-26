@@ -27,7 +27,7 @@ import numpy as np
 import torch
 from PIL import Image, UnidentifiedImageError
 
-from slr import data as slr_data, fusion as F, model as M
+from slr import data as slr_data, landmarks as LM, model as M
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 DEFAULT_WEIGHTS = Path(__file__).resolve().parent.parent / "weights" / "deit3_base.pt"
@@ -107,7 +107,9 @@ def load() -> dict:
         fusion_weight = float(meta["pixel_weight"])
         if not 0.0 <= fusion_weight <= 1.0:
             raise ValueError(f"fusion pixel_weight must be in [0,1], got {fusion_weight}")
-        fused = F.geometry_from_blob(meta["geometry"])
+        # `weight` on the model is the geometry share; the bundle records the
+        # pixel share, because that is the number the sweep reports against.
+        fused = LM.model_from_blob(meta["geometry"], weight=1.0 - fusion_weight)
         if set(fused.classes) != set(blob["classes"]):
             raise ValueError("pixel and geometry class vocabularies differ")
 
@@ -228,24 +230,14 @@ def predict(raw: bytes, top_k: int = 3, explain: bool = False) -> dict:
     probs = pixel_probs
     served_model = "pixel"
     if _STATE["geometry"] is not None:
-        from slr import hands
-
-        got = hands.detect_hand(np.asarray(img))
-        if got is None:
-            lm = np.zeros((1, 21, 3), dtype=np.float32)
-            found, side = np.array([False]), np.array(["Right"])
-        else:
-            points, hand_side = got
-            lm = points[None]
-            found, side = np.array([True]), np.array([hand_side])
-        geometry_probs = F.geometry_probabilities(
-            _STATE["geometry"], lm, found, side)
-        geometry_probs = F.align_probabilities(
-            geometry_probs, _STATE["geometry"].classes, _STATE["classes"])
-        fused_probs = F.fuse_probabilities(
-            pixel_probs.detach().cpu().numpy()[None], geometry_probs,
-            _STATE["fusion_weight"])
-        probs = torch.from_numpy(fused_probs[0]).float()
+        # Detection, the chirality fold, the class re-ordering and the
+        # no-hand-means-`nothing` rule all live in `slr.landmarks.probs`, so the
+        # served path and the measured path are the same code.
+        geometry_probs, _found, _side = LM.probs(
+            _STATE["geometry"], np.asarray(img), _STATE["classes"])
+        fused_probs = LM.fuse(pixel_probs.detach().cpu().numpy(), geometry_probs,
+                              _STATE["geometry"].weight)
+        probs = torch.from_numpy(fused_probs).float()
         served_model = "fused"
 
     k = min(top_k, probs.numel())

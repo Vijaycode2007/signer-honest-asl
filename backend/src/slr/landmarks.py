@@ -384,6 +384,26 @@ class Model(NamedTuple):
     weight: float                # share of the fused answer this model gets
 
 
+def model_from_blob(blob: dict, weight: float | None = None) -> Model:
+    """Build a servable model from a bundle dict, embedded or standalone.
+
+    The serving bundle carries the geometry model inside the pixel checkpoint so
+    the two travel as one file and cannot be paired up wrongly at deploy time.
+    """
+    if blob.get("feature") != "normalised_landmarks_v1":
+        raise ValueError(f"bundle declares feature {blob.get('feature')!r}; this "
+                         "code only knows how to rebuild normalised_landmarks_v1")
+    mean, std = np.asarray(blob["mean"]), np.asarray(blob["std"])
+    if mean.shape != (FEATURE_DIM,) or std.shape != (FEATURE_DIM,):
+        raise ValueError(f"scaler must have {FEATURE_DIM} values, "
+                         f"got {mean.shape}/{std.shape}")
+    net = build(len(blob["classes"]), FEATURE_DIM, blob.get("hidden", 256))
+    net.load_state_dict(blob["state_dict"])
+    net.eval()
+    w = weight if weight is not None else float(blob.get("fusion_weight", 1.0))
+    return Model(net, mean, std, list(blob["classes"]), w)
+
+
 def load_model(path: Path) -> Model:
     """Read a bundle written by `run` back into something servable.
 
@@ -391,15 +411,7 @@ def load_model(path: Path) -> Model:
     does in `slr.api`: constants fitted during training and re-derived at serve
     time are constants that can silently disagree.
     """
-    blob = torch.load(path, map_location="cpu", weights_only=False)
-    if blob.get("feature") != "normalised_landmarks_v1":
-        raise ValueError(f"{path} carries features '{blob.get('feature')}', "
-                         "which this code does not know how to build")
-    net = build(len(blob["classes"]), FEATURE_DIM, blob.get("hidden", 256))
-    net.load_state_dict(blob["state_dict"])
-    net.eval()
-    return Model(net, blob["mean"], blob["std"], blob["classes"],
-                 float(blob.get("fusion_weight", 1.0)))
+    return model_from_blob(torch.load(path, map_location="cpu", weights_only=False))
 
 
 @torch.no_grad()

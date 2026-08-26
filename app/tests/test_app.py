@@ -54,7 +54,7 @@ def _tiny_fused_bundle(tmp: Path) -> Path:
 
     classes = ["A", "B", "space", "del", "nothing"]
     pixel = M.build("vit_tiny", len(classes), pretrained=False)
-    geometry = landmarks.build(len(classes), in_dim=35, hidden=8)
+    geometry = landmarks.build(len(classes), in_dim=landmarks.FEATURE_DIM, hidden=8)
     with torch.no_grad():
         for p in geometry.parameters():
             p.zero_()
@@ -68,8 +68,9 @@ def _tiny_fused_bundle(tmp: Path) -> Path:
             "pixel_weight": 0.0,
             "geometry": {
                 "state_dict": geometry.state_dict(), "classes": classes,
-                "mean": np.zeros(35), "std": np.ones(35), "hidden": 8,
-                "feature": "per_finger_geometry_v1", "temperature": 1.0,
+                "mean": np.zeros(landmarks.FEATURE_DIM),
+                "std": np.ones(landmarks.FEATURE_DIM), "hidden": 8,
+                "feature": "normalised_landmarks_v1", "temperature": 1.0,
             },
         },
     }, path)

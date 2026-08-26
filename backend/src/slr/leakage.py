@@ -34,7 +34,7 @@ while touching a small fraction of the pairs.
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -145,7 +145,8 @@ class _DSU:
 
 # --- group recovery ----------------------------------------------------------
 
-def recover_groups(rows: list[dict], max_dist: int = 6, workers: int = 0) -> list[dict]:
+def recover_groups(rows: list[dict], max_dist: int = 6, workers: int = 0,
+                   collapse_at: float = 0.5) -> list[dict]:
     """Overwrite `group` with near-duplicate connected components, per source.
 
     What this recovers: **capture sessions**. Runs of frames showing the same
@@ -181,6 +182,30 @@ def recover_groups(rows: list[dict], max_dist: int = 6, workers: int = 0) -> lis
     two corpora is a cross-corpus leak the audit should *report* rather than a
     reason to merge groups.
 
+    When it collapses. Single-linkage components chain: if frame 1 matches frame
+    2 and frame 2 matches frame 3, all three merge even when 1 and 3 are nothing
+    alike. On a corpus shot as one continuous take in one room, that chain runs
+    the length of the corpus. On `asl_alphabet` at d<=6 it produced **one
+    component holding 85,664 of 87,000 images and spanning all 29 classes**, and
+    a group split built on that is not a split at all - the 795 frames that
+    failed to join the blob become the entire validation set, and they are
+    unrepresentative by construction.
+
+    It cost a real decision before it was caught: the pixel/geometry fusion
+    weight, chosen on that validation split, came back as zero, which was the
+    worst of the candidates on honest held-out data.
+
+    Hashing the hand crop instead of the whole frame does not help. Measured on
+    the same 87,000 images, the crop hash still collapses to one component at
+    d<=4. Chaining is a property of a continuous capture, not of what is hashed.
+
+    So `collapse_at` guards it. When one component swallows more than that
+    fraction of a source, the recovered grouping is discarded for that source and
+    the caller's existing `group` is kept, loudly. For `asl_alphabet` that is
+    `sources.group_by_frame_block`, which buckets the camera's own frame counter
+    and therefore cannot chain: 899 groups, largest 0.1%, no group spanning two
+    classes.
+
     Mutates and returns `rows`, and stashes the hash on each row so `audit` does
     not have to recompute it.
     """
@@ -202,10 +227,19 @@ def recover_groups(rows: list[dict], max_dist: int = 6, workers: int = 0) -> lis
             for a, b in zip(ia[keep].tolist(), ib[keep].tolist()):
                 dsu.union(a, b)
 
+        roots = [dsu.find(local) for local in range(len(idxs))]
+        biggest = Counter(roots).most_common(1)[0][1]
+        if biggest > collapse_at * len(idxs):
+            print(f"[groups] {source}: recovery COLLAPSED - one component holds "
+                  f"{biggest}/{len(idxs)} images ({biggest / len(idxs):.1%}). "
+                  f"Single-linkage chaining on a continuous capture. Keeping the "
+                  f"existing group keys for this source instead; a split built on "
+                  f"that blob would put almost everything on one side.")
+            continue
+
         comps: dict[int, int] = {}
         for local, gi in enumerate(idxs):
-            root = dsu.find(local)
-            cid = comps.setdefault(root, len(comps))
+            cid = comps.setdefault(roots[local], len(comps))
             rows[gi]["group"] = f"{source}/dup{cid:06d}"
         print(f"[groups] {source}: {len(idxs)} imgs -> {len(comps)} components "
               f"({n_edges} near-dup edges, d<={max_dist})")

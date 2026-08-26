@@ -692,3 +692,80 @@ def test_detector_reports_which_hand_it_found():
     import pickle
     assert pickle.loads(pickle.dumps(got))[1] == side
     assert hands.landmarks(np.asarray(Image.open(real[0]).convert("RGB"))).shape == (21, 3)
+
+
+# --- the validation split cannot come from a single-session corpus -----------
+
+def test_recover_groups_refuses_a_collapsed_grouping(tmp_path):
+    """A continuous capture chains into one component; returning it is the bug.
+
+    On the real asl_alphabet this produced a single component holding 98.5% of
+    87,000 images and spanning all 29 classes. A "group split" of that puts
+    almost everything on one side, and the fusion weight chosen on the remainder
+    came back as the worst of its candidates. Collapsing must be refused, not
+    returned.
+    """
+    base = Image.new("L", (64, 64), 128)
+    rows = []
+    for i in range(24):
+        p = tmp_path / f"f{i:03d}.png"
+        # A gradient that shifts by one level per frame: every frame is a near
+        # duplicate of its neighbour, which is what a continuous take looks like.
+        im = base.copy()
+        im.putpixel((i % 8, i // 8), 255)
+        im.save(p)
+        rows.append({"path": str(p), "label": "A", "source": "take",
+                     "group": f"declared/{i // 6}", "split": ""})
+
+    leakage.recover_groups(rows, max_dist=6, workers=0)
+    groups = {r["group"] for r in rows}
+    assert groups == {f"declared/{i}" for i in range(4)}, (
+        "recovery collapsed and must have kept the caller's declared groups, "
+        f"got {sorted(groups)}")
+
+
+def test_recover_groups_still_works_when_it_does_not_collapse(tmp_path):
+    """The guard must not fire on a corpus with real session structure."""
+    rows = []
+    for session in range(4):
+        for i in range(5):
+            p = tmp_path / f"s{session}_{i}.png"
+            # Each session gets its own stripe period. dhash compares adjacent
+            # pixels, so sessions must differ in *structure*: flat images of
+            # different brightness hash identically and would look like one take.
+            im = Image.new("L", (64, 64))
+            period = 2 + session * 3
+            im.putdata([255 if (x // period) % 2 else 0
+                        for y in range(64) for x in range(64)])
+            im.putpixel((i, i), 128)          # a little within-session variation
+            im.save(p)
+            rows.append({"path": str(p), "label": "A", "source": "multi",
+                         "group": "unset", "split": ""})
+    leakage.recover_groups(rows, max_dist=6, workers=0)
+    found = {r["group"] for r in rows}
+    assert "unset" not in found, "recovery should have replaced the placeholder"
+    assert len(found) > 1, "distinct sessions must not merge into one component"
+
+
+def test_tuning_split_is_group_disjoint_and_keeps_both_sides_complete(tmp_path):
+    """Choosing a number needs a slice of the *holdout*, not of the training corpus."""
+    rows = []
+    for lab in ("A", "B", "C"):
+        for g in range(8):
+            for i in range(2):
+                rows.append({"path": f"{lab}-{g}-{i}.jpg", "label": lab,
+                             "source": "holdout", "group": f"{lab}/g{g}",
+                             "split": "", "dhash": 0})
+    # Pre-set groups and a hash so recovery is a no-op we do not need files for.
+    import slr.leakage as lk
+    real = lk.recover_groups
+    try:
+        lk.recover_groups = lambda r, **kw: r          # groups already declared
+        tune, report = data.carve_tuning_split(rows, frac=0.5, seed=0)
+    finally:
+        lk.recover_groups = real
+
+    assert len(tune) + len(report) == len(rows)
+    assert {r["group"] for r in tune}.isdisjoint({r["group"] for r in report})
+    assert {r["label"] for r in tune} == {"A", "B", "C"}
+    assert {r["label"] for r in report} == {"A", "B", "C"}

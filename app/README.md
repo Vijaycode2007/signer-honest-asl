@@ -168,6 +168,24 @@ Over a real network it will lag; the upgrade then is `@mediapipe/tasks-vision` i
 
 The overlay is hidden while a captured still is on screen, because those bones described the live frame and not the frozen one.
 
+Beside the tracking chip is a focus readout: the Laplacian variance of the hand crop at 224px, smoothed over five frames, with a tick at the training corpus's median.
+
+Measuring it on the crop rather than the frame is the whole point.
+Laplacian variance is not comparable across image sizes, so a 200x200 corpus frame and a 640x640 phone frame score wildly differently for the same real sharpness.
+Cropping to the hand and resizing to 224 first is what makes one camera's number mean the same as another's.
+
+The bands come from `/api/capture-target` and were measured through this exact path, so "good" means "looks like the data the model was trained on" rather than a threshold somebody invented:
+
+| band | value | what it is |
+| --- | --- | --- |
+| soft | below 45 | softer than a quarter of the training corpus |
+| typical | 84 | the `asl_alphabet` median |
+| good | 105 and up | the holdout corpus median |
+
+Two caveats worth knowing.
+The spread inside each corpus is very wide and depends on the handshape, so treat the bands as a guide rather than a line.
+And the numbers move if the tracker's frame size or JPEG quality change, because both destroy high-frequency detail before the metric ever sees it.
+
 `toFrame` in `app/web/app.js` composes the centre crop with `object-fit: cover`, and getting either backwards puts the skeleton beside the hand rather than on it, which reads as a broken detector. There is a dependency-free check for it:
 
 ```bash

@@ -119,6 +119,27 @@ button:focus-visible, [tabindex]:focus-visible {
 #track-dot { background: var(--ok, #3F8F5E); }
 #track-chip.searching #track-dot { background: #C98A2E; }
 
+/* Focus readout. The tick is the corpus median: land at or right of it and the
+   pixel half of the model is seeing what it was trained on. */
+.focus-chip { gap: 9px; }
+.focus-meter {
+  position: relative; display: inline-block;
+  width: 54px; height: 6px; border-radius: 99px;
+  background: var(--line-2); overflow: hidden;
+}
+.focus-fill {
+  position: absolute; inset: 0 auto 0 0; width: 0;
+  border-radius: 99px; background: var(--clay);
+  transition: width .12s linear, background-color .2s ease;
+}
+.focus-chip.ok   .focus-fill { background: var(--ok, #3F8F5E); }
+.focus-chip.soft .focus-fill { background: #C98A2E; }
+.focus-mark {
+  position: absolute; top: -2px; bottom: -2px; width: 1.5px;
+  background: var(--ink-3); opacity: .55;
+}
+#focus-text { font-variant-numeric: tabular-nums; min-width: 8ch; }
+
 
 .frame-empty {
   position: absolute; inset: 0; display: grid; place-items: center;

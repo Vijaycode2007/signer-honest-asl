@@ -61,6 +61,23 @@ def model_card() -> dict:
     return {**card, "runtime": engine.health(), "classes": engine.classes()}
 
 
+# Median and quartiles of the focus metric over the corpora the model was trained
+# and tested on, measured through this exact path: centre square -> 256px JPEG at
+# quality 70 -> hand crop -> 224px. Re-measure if the tracker's frame size or JPEG
+# quality changes, because the numbers move with both.
+REFERENCE_SHARPNESS = {
+    "soft_below": 45.0,       # training corpus 25th percentile
+    "typical": 84.0,          # asl_alphabet median
+    "good_above": 105.0,      # holdout corpus median
+}
+
+
+@app.get("/api/capture-target")
+def capture_target() -> dict:
+    """What a frame needs to look like for the pixel half of the model to help."""
+    return REFERENCE_SHARPNESS
+
+
 @app.post("/api/landmarks")
 async def landmarks(
     image: UploadFile = File(..., description="one video frame, already square"),
@@ -100,10 +117,25 @@ async def landmarks(
 
     lm = hands.landmarks(arr, retry=False)
     if lm is None:
-        return JSONResponse({"hand": None})
+        return JSONResponse({"hand": None, "sharpness": None})
     h, w = arr.shape[:2]
-    return JSONResponse({"hand": [[round(float(x) / w, 5), round(float(y) / h, 5)]
-                                  for x, y, _ in lm]})
+
+    # Focus, measured where it matters: the hand, at the size the classifier reads
+    # it. Laplacian variance is the standard cheap focus metric, and it is NOT
+    # comparable across image sizes - a 200x200 corpus frame and a 640x640 phone
+    # frame score wildly differently for the same real sharpness. Cropping to the
+    # hand and resizing to 224 first is what makes the number mean the same thing
+    # for every camera, and comparable to REFERENCE_SHARPNESS.
+    import cv2
+    box = hands._box([(x, y) for x, y, _ in lm], w, h)
+    l, t, r, b = box
+    crop = cv2.resize(arr[t:b, l:r], (224, 224), interpolation=cv2.INTER_AREA)
+    sharp = float(cv2.Laplacian(cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY), cv2.CV_64F).var())
+
+    return JSONResponse({
+        "hand": [[round(float(x) / w, 5), round(float(y) / h, 5)] for x, y, _ in lm],
+        "sharpness": round(sharp, 1),
+    })
 
 
 @app.post("/api/predict")

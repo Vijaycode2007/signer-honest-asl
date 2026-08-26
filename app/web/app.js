@@ -8,6 +8,8 @@ const els = {
   video: $('video'), shot: $('shot'), scratch: $('scratch'),
   overlay: $('overlay'), tracker: $('tracker'),
   trackChip: $('track-chip'), trackText: $('track-text'),
+  focusChip: $('focus-chip'), focusFill: $('focus-fill'),
+  focusMark: $('focus-mark'), focusText: $('focus-text'),
   useAnyway: $('use-anyway'),
   frameEmpty: $('frame-empty'), frameHint: $('frame-hint'),
   camDot: $('cam-dot'), camText: $('cam-text'),
@@ -79,6 +81,7 @@ async function startCamera() {
     els.frameEmpty.hidden = true;
     els.camDot.className = 'dot live';
     els.camText.textContent = 'Camera on';
+    loadFocusBands();
     trackLoop();
   } catch {
     camOff('Camera blocked');
@@ -89,6 +92,7 @@ function camOff(text) {
   state.hasCamera = false;
   track.stop = true;
   els.trackChip.hidden = true;
+  els.focusChip.hidden = true;
   els.camDot.className = 'dot off';
   els.camText.textContent = text;
   els.video.hidden = true;
@@ -508,6 +512,47 @@ const TRACK_FLOOR_MS = 40;     // don't spin faster than the eye needs
 
 const track = { on: false, inflight: false, pts: null, stop: false };
 
+/* Focus. Laplacian variance of the hand crop at 224px, which is the only way the
+   number means the same thing on two different cameras. Bands come from the
+   server, measured on the corpora the model was actually trained and tested on,
+   so "good" means "looks like training data" rather than an invented threshold.
+
+   Smoothed over a short window: a single frame's variance jumps around enough
+   with hand motion that a raw readout is unreadable and would have you chasing
+   noise. */
+const focus = { band: null, recent: [] };
+
+async function loadFocusBands() {
+  try {
+    focus.band = await (await fetch('/api/capture-target')).json();
+    // The tick sits at the corpus median on a scale that runs to twice it.
+    els.focusMark.style.left = `${(focus.band.typical / (focus.band.good_above * 1.6)) * 100}%`;
+  } catch { /* the readout simply stays hidden */ }
+}
+
+function renderFocus(value) {
+  if (value == null || !focus.band) { els.focusChip.hidden = true; focus.recent = []; return; }
+  focus.recent.push(value);
+  if (focus.recent.length > 5) focus.recent.shift();
+  const sorted = [...focus.recent].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+
+  const full = focus.band.good_above * 1.6;
+  els.focusChip.hidden = false;
+  els.focusFill.style.width = `${Math.min(100, (median / full) * 100)}%`;
+  els.focusChip.classList.toggle('soft', median < focus.band.soft_below);
+  els.focusChip.classList.toggle('ok', median >= focus.band.typical);
+  const word = median < focus.band.soft_below ? 'soft'
+             : median >= focus.band.good_above ? 'sharp'
+             : median >= focus.band.typical ? 'good' : 'ok';
+  els.focusText.textContent = `${Math.round(median)} ${word}`;
+  els.focusChip.title =
+    `Hand sharpness ${Math.round(median)}. Training corpus sits at ${focus.band.typical}, `
+    + `the holdout corpus at ${focus.band.good_above}. Below ${focus.band.soft_below} is `
+    + `softer than a quarter of the training data, and the pixel half of the model `
+    + `contributes least there.`;
+}
+
 function trackerBlob() {
   const v = els.video;
   const side = Math.min(v.videoWidth, v.videoHeight);
@@ -594,12 +639,14 @@ async function trackOnce() {
   if (r.status === 503) {                 // no mediapipe on this box: stop asking
     track.stop = true;
     els.trackChip.hidden = true;
+    els.focusChip.hidden = true;
     return;
   }
   if (!r.ok) return;
   const d = await r.json();
   track.pts = d.hand;
   trackChip(!!d.hand);
+  renderFocus(d.sharpness);
   drawSkeleton(els.shot.hidden ? d.hand : null);
 }
 

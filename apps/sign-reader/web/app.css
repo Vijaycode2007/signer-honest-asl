@@ -1,0 +1,438 @@
+/* Sign Reader - warm paper, clay for action and uncertainty, sage for
+   confidence. Uncertainty is not red: refusing to guess is not an error. */
+
+:root {
+  --paper:  #FAF6F0;
+  --card:   #FFFFFF;
+  --sunk:   #F4EDE4;
+  --ink:    #2E2823;
+  --ink-2:  #736A60;
+  --ink-3:  #A9A096;
+  --ink-4:  #C4BBB0;
+  --line:   #E9E0D5;
+  --line-2: #EFE7DC;
+  --clay:   #B4603F;
+  --clay-d: #8E4830;
+  --clay-bg:#FAF0EA;
+  --clay-br:#F0DCD1;
+  --sage:   #4A8464;
+  --sage-bg:#F1F5F1;
+  --sage-br:#DCE7DE;
+  --serif:  Newsreader, Georgia, "Times New Roman", serif;
+  --sans:   Figtree, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --shadow: 0 1px 2px rgba(80, 60, 40, .04);
+  --shadow-lg: 0 2px 14px rgba(80, 60, 40, .05);
+}
+
+* { box-sizing: border-box; }
+
+/* Several things here are display:flex, which outranks the user agent's
+   [hidden] { display: none } and leaves "hidden" elements on screen. */
+[hidden] { display: none !important; }
+
+html { height: 100%; }
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+}
+
+/* --- top bar --------------------------------------------------------------- */
+
+.bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line-2);
+  flex-shrink: 0;
+}
+.brand { display: flex; align-items: center; gap: 10px; color: var(--clay); }
+.mark { width: 24px; height: 24px; flex-shrink: 0; }
+.wordmark {
+  font-family: var(--serif); font-size: 21px; font-weight: 500;
+  letter-spacing: -.01em; color: var(--ink);
+}
+.bar-right { display: flex; align-items: center; gap: 20px; }
+.bar-note { font-size: 13.5px; color: var(--ink-3); }
+.link {
+  border: 0; background: none; padding: 6px 2px;
+  font-size: 14.5px; font-weight: 500; color: var(--ink-2);
+}
+.link:hover { color: var(--clay); }
+
+.boot-error {
+  margin: 16px 24px 0; padding: 13px 16px;
+  background: var(--clay-bg); border: 1px solid var(--clay-br);
+  border-radius: 13px; font-size: 13.5px; line-height: 1.5; color: var(--clay-d);
+  white-space: pre-wrap;
+}
+
+/* --- layout ---------------------------------------------------------------- */
+
+.layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px; padding: 24px; max-width: 1400px; margin: 0 auto;
+  align-items: stretch;
+  flex: 1; min-height: 0; width: 100%;
+}
+
+/* --- the frame ------------------------------------------------------------- */
+
+.stage { display: flex; min-height: 0; }
+.frame {
+  position: relative; flex: 1; min-height: 420px;
+  background: var(--sunk); border: 1px solid var(--line);
+  border-radius: 26px; overflow: hidden; box-shadow: var(--shadow-lg);
+}
+#video, #shot {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+/* ASL is handed: a mirrored preview would show the user a left-handed sign.
+   The preview is NOT flipped, so what they see is what the model gets. */
+
+/* Drawn in frame space; app.js matches the video's object-fit: cover. */
+#overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; pointer-events: none;
+}
+#overlay[hidden] { display: none; }
+
+/* Tracking chip: green while a hand is found, amber while searching. */
+#track-dot { background: var(--ok, #3F8F5E); }
+#track-chip.searching #track-dot { background: #C98A2E; }
+
+/* Focus readout. The tick is the corpus median: land at or right of it and the
+   pixel half of the model is seeing what it was trained on. */
+.focus-chip { gap: 9px; }
+.focus-meter {
+  position: relative; display: inline-block;
+  width: 54px; height: 6px; border-radius: 99px;
+  background: var(--line-2); overflow: hidden;
+}
+.focus-fill {
+  position: absolute; inset: 0 auto 0 0; width: 0;
+  border-radius: 99px; background: var(--clay);
+  transition: width .12s linear, background-color .2s ease;
+}
+.focus-chip.ok   .focus-fill { background: var(--ok, #3F8F5E); }
+.focus-chip.soft .focus-fill { background: #C98A2E; }
+.focus-mark {
+  position: absolute; top: -2px; bottom: -2px; width: 1.5px;
+  background: var(--ink-3); opacity: .55;
+}
+#focus-text { font-variant-numeric: tabular-nums; min-width: 8ch; }
+
+
+.frame-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: #E0C8AF;
+}
+.hand { width: 190px; max-width: 45%; height: auto; }
+
+.chips { position: absolute; left: 16px; top: 16px; display: flex; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255, 253, 250, .92); border: 1px solid var(--line-2);
+  border-radius: 999px; padding: 7px 13px;
+  font-size: 12.5px; font-weight: 500; color: var(--ink);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.dot.live { background: var(--sage); }
+.dot.off  { background: var(--clay); }
+
+.frame-hint {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 0 32px 32px; text-align: center;
+  background: linear-gradient(to bottom, rgba(244, 237, 228, 0) 0%, rgba(244, 237, 228, .94) 62%);
+}
+.hint-title { font-family: var(--serif); font-size: 23px; line-height: 1.3; margin: 0; }
+.hint-sub { font-size: 14.5px; line-height: 1.45; margin: 7px 0 0; color: var(--ink-2); }
+
+
+/* --- readout --------------------------------------------------------------- */
+
+.readout { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 22px; padding: 20px 22px; box-shadow: var(--shadow);
+}
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.eyebrow {
+  font-size: 12.5px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.msg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-quiet {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line); background: #FDFBF8; border-radius: 10px;
+  padding: 8px 13px; font-size: 13px; font-weight: 500; color: var(--ink-2);
+  min-height: 38px;
+}
+.btn-quiet:hover { border-color: var(--ink-4); color: var(--ink); }
+.btn-quiet svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.message { min-height: 60px; display: flex; align-items: center; }
+.message-text {
+  font-family: var(--serif); font-size: clamp(30px, 5vw, 44px); font-weight: 500;
+  letter-spacing: .14em; line-height: 1.15; word-break: break-word;
+}
+.message-empty { font-family: var(--serif); font-size: 25px; font-style: italic; color: var(--ink-4); }
+
+.result-card { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 190px; }
+.result-idle {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; color: var(--ink-3); font-size: 15px; text-align: center;
+}
+.result-idle svg { width: 32px; height: 32px; color: #D6CCC0; }
+.result { display: flex; flex-direction: column; height: 100%; }
+
+.result-top { display: flex; align-items: center; gap: 20px; }
+.glyph {
+  width: 118px; height: 118px; flex-shrink: 0; border-radius: 32px;
+  display: grid; place-items: center;
+  background: var(--sage-bg); border: 1px solid var(--sage-br);
+  font-family: var(--serif); font-size: 72px; font-weight: 500; line-height: 1;
+}
+.glyph.word { font-size: 26px; letter-spacing: .02em; }
+.glyph.unsure { background: var(--clay-bg); border-color: var(--clay-br); color: var(--clay); }
+.glyph.unsure svg { width: 48px; height: 48px; }
+
+.result-body { flex: 1; min-width: 0; }
+.result-phrase { font-size: 18px; font-weight: 600; margin: 0 0 4px; color: var(--sage); }
+.result-phrase.unsure { font-family: var(--serif); font-size: 25px; font-weight: 500; color: var(--ink); }
+.result-sub { font-size: 14.5px; line-height: 1.45; margin: 0 0 13px; color: var(--ink-2); }
+.meter { height: 9px; border-radius: 5px; background: #EDE5DA; overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 5px; background: var(--sage); width: 0; transition: width .3s ease; }
+.meter-fill.unsure { background: var(--clay); }
+
+/* Offered only when the model withheld a guess. */
+.use-anyway {
+  margin-top: 12px; align-self: flex-start;
+  border-color: var(--clay-br); color: var(--clay);
+}
+.use-anyway[hidden] { display: none; }
+.result-meta {
+  display: flex; justify-content: space-between; gap: 12px;
+  margin-top: 8px; font-size: 12.5px; color: var(--ink-3);
+}
+
+.alts { padding-top: 16px; border-top: 1px solid var(--line-2); }
+.alts-label { display: block; font-size: 12.5px; color: var(--ink-3); margin-bottom: 9px; }
+.alts-row { display: flex; gap: 9px; flex-wrap: wrap; }
+.alt {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  border: 1px solid var(--line-2); border-radius: 11px; padding: 8px 14px;
+}
+.alt-letter { font-family: var(--serif); font-size: 18px; }
+.alt-p { font-size: 12.5px; color: var(--ink-3); }
+
+/* --- evidence: where the model looked -------------------------------------
+   A dark panel: the photo is dimmed and the attention map screened over it,
+   so the model's focus reads as light on the frame. */
+
+.evidence {
+  background: #241F1B;
+  border-color: #241F1B;
+  padding: 16px 16px 14px;
+}
+.ev-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.ev-eyebrow { color: #9A8F84; }
+.ev-legend {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #8A8078;
+}
+.ev-dot {
+  width: 34px; height: 7px; border-radius: 4px; display: inline-block;
+  background: linear-gradient(90deg, #3A322C 0%, #8A3A22 55%, #FF8A5C 100%);
+}
+.ev-stage {
+  /* Bound the width and let aspect-ratio set the height; a max-height bound
+     letterboxes once it bites. */
+  position: relative; width: min(100%, 300px); aspect-ratio: 1;
+  border-radius: 14px; overflow: hidden;
+  background: #17130F; margin: 0 auto;
+}
+.ev-stage img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+/* dim the photo so the attention has somewhere to glow */
+#ev-shot { filter: brightness(.4) contrast(1.06) saturate(.5); }
+/* screen makes the map add light instead of covering the picture */
+#ev-heat { mix-blend-mode: screen; }
+
+.ev-note {
+  margin: 12px 0 0; font-size: 12.5px; line-height: 1.5;
+  color: #8A8078; text-wrap: pretty;
+}
+
+/* --- actions --------------------------------------------------------------- */
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; margin-top: auto; }
+.shutter {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center;
+  gap: 12px; min-height: 62px; border: 0; border-radius: 20px;
+  background: var(--clay); color: #fff; font-size: 17px; font-weight: 600;
+  box-shadow: 0 4px 14px rgba(180, 96, 63, .28);
+}
+.shutter svg { width: 22px; height: 22px; }
+.shutter:hover { background: var(--clay-d); }
+.shutter:disabled { opacity: .55; cursor: progress; box-shadow: none; }
+.upload { min-height: 62px; border-radius: 20px; padding: 0 20px; }
+
+/* Secondary to the calibrated photo path, so outlined. It takes a whole row
+   because its label does not fit in a third of the width. */
+.record {
+  flex: 1 1 100%; display: inline-flex; align-items: center; justify-content: center;
+  gap: 10px; min-height: 52px; border-radius: 20px;
+  border: 1.5px solid var(--clay-br); background: var(--clay-bg);
+  color: var(--clay-d); font-size: 15px; font-weight: 600;
+}
+.record svg { width: 19px; height: 19px; }
+.record:hover { border-color: var(--clay); }
+.record:disabled { opacity: .55; cursor: progress; }
+.record.recording {
+  background: var(--clay); border-color: var(--clay); color: #fff;
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  50% { box-shadow: 0 0 0 6px rgba(180, 96, 63, .18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .record.recording { animation: none; }
+}
+
+/* --- about ----------------------------------------------------------------- */
+
+.about {
+  width: min(560px, calc(100vw - 32px)); max-height: min(84vh, 900px);
+  padding: 0; border: 1px solid var(--line); border-radius: 22px;
+  background: var(--card); color: var(--ink); overflow: hidden;
+}
+.about::backdrop { background: rgba(46, 40, 35, .34); }
+.about-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line-2);
+  position: sticky; top: 0; background: var(--card);
+}
+.about-title { font-family: var(--serif); font-size: 20px; font-weight: 500; }
+.about-body { padding: 20px; overflow-y: auto; max-height: calc(84vh - 70px); }
+
+.about-lede { font-family: var(--serif); font-size: 24px; line-height: 1.32; margin: 0 0 10px; text-wrap: pretty; }
+.about-sub { font-size: 15px; line-height: 1.55; margin: 0 0 20px; color: var(--ink-2); text-wrap: pretty; }
+.about-h {
+  font-size: 12.5px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px;
+}
+.about-block { padding: 18px; background: var(--paper); border-radius: 16px; margin-bottom: 14px; }
+.about-claim { font-family: var(--serif); font-size: 19px; line-height: 1.35; margin: 0 0 14px; text-wrap: pretty; }
+
+.proto { display: flex; gap: 13px; padding-bottom: 11px; margin-bottom: 11px; border-bottom: 1px solid var(--line-2); }
+.proto:last-of-type { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+.proto-n { width: 58px; flex-shrink: 0; text-align: right; font-family: var(--serif); font-size: 25px; line-height: 1.1; }
+.proto-b { flex: 1; min-width: 0; }
+.proto-h { font-size: 14.5px; font-weight: 600; margin: 0 0 2px; }
+.proto-x { font-size: 13.5px; line-height: 1.45; margin: 0; color: var(--ink-2); text-wrap: pretty; }
+.proto.muted .proto-n, .proto.muted .proto-h, .proto.muted .proto-x { color: var(--ink-3); }
+.proto.key .proto-n { color: var(--clay); }
+
+.note { font-size: 12.5px; line-height: 1.5; color: #8E857A; text-wrap: pretty; margin: 14px 0 0; }
+/* A caveat that must survive skim-reading, without a red alert box. */
+.note.warn { color: var(--ink-2); border-left: 2px solid #D6542D; padding-left: 10px; }
+.proto-tag { font-style: normal; font-weight: 500; font-size: 12px; color: #8E857A; }
+
+.board-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.board-name { font-size: 13.5px; font-weight: 500; width: 118px; flex-shrink: 0; color: var(--ink-3); }
+.board-row.win .board-name, .board-row.win .board-score { color: var(--ink); }
+.board-bar { flex: 1; height: 6px; border-radius: 3px; background: #F0E9DF; overflow: hidden; }
+.board-fill { height: 100%; border-radius: 3px; background: #DDD4C8; }
+.board-row.win .board-fill { background: var(--sage); }
+.board-score { font-size: 12.5px; width: 34px; text-align: right; flex-shrink: 0; color: var(--ink-3); }
+
+.alpha { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.alpha span {
+  aspect-ratio: 1; border-radius: 9px; background: var(--card);
+  display: grid; place-items: center; font-family: var(--serif); font-size: 16px;
+}
+.alpha-special { display: flex; gap: 6px; margin-top: 6px; }
+.alpha-special span {
+  flex: 1; border-radius: 9px; background: var(--card); padding: 9px 0;
+  display: grid; place-items: center; font-size: 12.5px; font-weight: 500; color: var(--ink-2);
+}
+.limits { margin: 0; padding-left: 18px; }
+.limits li { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); margin-bottom: 5px; }
+
+/* --- keeping the photo ------------------------------------------------------
+   Quieter than the result card: collecting is a side errand. */
+
+.collect { flex: 0 0 auto; }
+.collect-count { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.collect-row { display: flex; align-items: center; gap: 10px; }
+.truth {
+  flex: 1 1 auto; max-width: 150px; min-width: 0; height: 40px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--sunk);
+  padding: 0 12px; font-family: var(--serif); font-size: 19px; font-weight: 500;
+  color: var(--ink); text-align: center; text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.truth::placeholder { color: var(--ink-4); font-weight: 400; letter-spacing: 0; }
+.truth:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+.collect-save { flex: 0 0 auto; min-height: 40px; }
+.collect-save:disabled { opacity: .45; cursor: default; border-color: var(--line); color: var(--ink-3); }
+.collect-note { margin-top: 10px; }
+.collect-note.saved { color: var(--sage); }
+.collect-note.bad { color: var(--clay-d); }
+
+/* --- phone ----------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .bar { padding: 14px 16px; }
+  .bar-note { display: none; }
+  /* Message on top, camera in the middle, shutter under the thumb.
+     `display: contents` lets the readout's cards take their own order slot in
+     the page column instead of moving as one block. */
+  .layout { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 20px; }
+  .readout { display: contents; }
+  .message-card { order: 1; }
+  .stage { order: 2; flex: 1; }
+  .result-card { order: 3; }
+  .collect { order: 4; }
+  .evidence { order: 5; }
+  .actions { order: 6; margin-top: 0; }
+  .frame { min-height: 38vh; border-radius: 22px; }
+  .message-card { padding: 16px; }
+  .btn-text { display: none; }
+  .glyph { width: 84px; height: 84px; border-radius: 24px; font-size: 50px; }
+  .glyph.unsure svg { width: 34px; height: 34px; }
+  .result-top { gap: 16px; }
+  .result-phrase.unsure { font-size: 21px; }
+  .actions {
+    position: sticky; bottom: 0; padding-bottom: 4px;
+    background: linear-gradient(to bottom, rgba(250,246,240,0) 0%, var(--paper) 22%);
+  }
+  .shutter { min-height: 58px; }
+  .upload { min-height: 58px; padding: 0 16px; font-size: 13px; }
+  .alpha { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

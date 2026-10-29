@@ -1,31 +1,11 @@
-# data + artifacts, never commit
-dataset/raw/
-dataset/manifests/
-dataset/crops/
-dataset/landmarks/
-dataset/models/
-docs/pdf/
-runs/
-*.pt
-*.pth
-*.onnx
-*.zip
-*.tar.gz
-
-# python
 __pycache__/
-*.py[cod]
 .venv/
-venv/
 .pytest_cache/
-.ipynb_checkpoints/
-*.egg-info/
-
-# os
-.DS_Store
-
-# pytest
-.pytest_cache/
-
-# leftover from the old Colab clone cell; never commit a nested checkout
-backend/notebooks/signer-honest-asl/
+.ruff_cache/
+dataset/raw/
+._*
+# Weights are too big for GitHub; set SLR_WEIGHTS_URL or copy them in.
+# The hand detector downloads itself on first use.
+*.pt
+*.part
+dataset/models/

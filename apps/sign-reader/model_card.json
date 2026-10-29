@@ -1,0 +1,202 @@
+{
+  "generated_from": "runs/fusion/holdout_report.json",
+  "regenerate_with": "python scripts/holdout_report.py, then update the figures below. apps/sign-reader/tests/test_app.py::test_card_figures_agree_with_the_generated_holdout_report fails if they drift apart.",
+  "headline_claim": "Cross-corpus isolated-handshape accuracy. NOT signer-independent: neither corpus records who signed, so what is established is corpus disjointness, not signer disjointness.",
+  "model": {
+    "name": "DeiT III base + hand-landmark geometry",
+    "preset": "deit3_base",
+    "timm_name": "deit3_base_patch16_224.fb_in22k_ft_in1k",
+    "params_m": 85.84,
+    "img_size": 224,
+    "n_classes": 29,
+    "selected_on": "an architecture search whose validation partition was degenerate - see architecture_search below - then a cross-corpus fusion sweep that was not",
+    "val_f1": 0.8545,
+    "val_acc": 0.8443,
+    "val_note": "The deployed checkpoint's own validation macro-F1, from runs/deploy_deit3_base/result.json. The 0.9456 this card used to show was a different run: 4 epochs inside the architecture sweep, not the 8-epoch deployment run. Two numbers for two runs, and only this one describes the served weights.",
+    "fusion": {
+      "pixel_weight": 0.05,
+      "geometry_weight": 0.95
+    },
+    "note": "The 5:95 ratio was swept in 0.025 steps on one near-duplicate-group half of the holdout corpus by scripts/build_bundle.py and reported on the other; neither model was trained on either half. On the previous geometry model, selecting the ratio on the in-corpus validation split instead returned a pixel weight of 1.0, the worst of the candidates."
+  },
+  "protocols": [
+    {
+      "id": "A",
+      "name": "Random split",
+      "headline": "Testing it the sloppy way",
+      "test_acc": 1.0,
+      "test_f1": 1.0,
+      "leak_rate": 0.9914,
+      "exact_duplicates": 643,
+      "measured_on": "deit3_base + per_finger_geometry (superseded, not served)",
+      "comparable_to_headline": false,
+      "explain": "Frames shuffled at random. 99.14% of the test photos were near-copies of training photos and 643 were exact duplicates, so the model was grading its own memory. This is how most published sign-language numbers are produced."
+    },
+    {
+      "id": "B",
+      "name": "Group split",
+      "headline": "A new recording session",
+      "test_acc": 0.7196,
+      "test_f1": 0.8135,
+      "leak_rate": 0.005,
+      "exact_duplicates": 0,
+      "measured_on": "deit3_base + per_finger_geometry (superseded, not served)",
+      "comparable_to_headline": false,
+      "explain": "Whole recovered near-duplicate components dealt to one side of the split only. 'Group' here means hash-component, which is a capture session at best and a shared background at worst - it is not a signer."
+    },
+    {
+      "id": "C",
+      "name": "Cross-corpus",
+      "headline": "A different corpus, a new room, a new camera",
+      "test_n": 1740,
+      "test_acc": 0.9184,
+      "test_f1": 0.9118,
+      "test_log_loss": 0.3554,
+      "log_loss_eps": 1e-06,
+      "leak_rate": 0.0,
+      "exact_duplicates": 0,
+      "measured_on": "deit3_base + landmark geometry (the served bundle)",
+      "comparable_to_headline": true,
+      "is_headline_number": true,
+      "explain": "The pixel model trained on asl_alphabet and the hand-geometry model on asl_alphabet, SignAlphaSet and the static-letter frames of asl_dynamic. Both are tested on all 1,740 images of asl_alphabet_test - a separately collected corpus, in a different room, on a different camera - which neither trained on. This is a corpus-disjoint number. It is not a signer-disjoint one: no participant ids exist on either side, so nothing rules out an overlapping person, and 'different dataset' is an assumption rather than a proof."
+    }
+  ],
+  "protocol_comparability": "A, B and C are three different protocols AND, for A and B, a different geometry model. The A-minus-C difference is not an apples-to-apples contribution of any one change. A and B still need re-measuring against the shipped pipeline.",
+  "pipelines_on_protocol_c": {
+    "note": "All 1,740 holdout images, recomputed from the served bundle by scripts/holdout_report.py.",
+    "pixel": {
+      "accuracy": 0.6977,
+      "macro_f1": 0.674,
+      "log_loss": 1.2462
+    },
+    "geometry": {
+      "accuracy": 0.9195,
+      "macro_f1": 0.9131,
+      "log_loss": 0.4738
+    },
+    "fused": {
+      "accuracy": 0.9184,
+      "macro_f1": 0.9118,
+      "log_loss": 0.3554
+    }
+  },
+  "what_the_differences_are_worth": [
+    {
+      "change": "pixels -> hand geometry",
+      "delta_accuracy": 0.2218,
+      "ci95": [
+        0.1876,
+        0.2565
+      ],
+      "mcnemar_p": 0.0,
+      "verdict": "resolved",
+      "explain": "446 images go wrong-to-right and 60 right-to-wrong. This is the one large, reproducible effect in the repository."
+    },
+    {
+      "change": "geometry -> pixel fusion",
+      "delta_accuracy": -0.0011,
+      "ci95": [
+        -0.0035,
+        0.0
+      ],
+      "mcnemar_p": 0.5,
+      "verdict": "unresolved",
+      "explain": "Fusion corrects 0 images and breaks 2 of 1,740. The accuracy difference is not distinguishable from noise. What fusion does buy is log-loss, 0.4738 to 0.3554, and a better-calibrated confidence is what an abstention threshold is cut from."
+    },
+    {
+      "change": "adding SignAlphaSet to the geometry training pool",
+      "delta_accuracy": 0.0034,
+      "ci95": [
+        -0.0068,
+        0.0139
+      ],
+      "mcnemar_p": 0.4408,
+      "verdict": "unresolved",
+      "explain": "Measured on the earlier coordinate-only geometry model (normalised_landmarks_v1), before the served model moved to three corpora, distances and augmentation. 0.8931 to 0.8966, with left-hand accuracy unchanged at 16/28. Reported because the plan predicted the largest available gain and did not get one. Intervals are bootstrapped over whole near-duplicate components, not rows, because rows inside a component are near-copies."
+    }
+  ],
+  "detector_decomposition": {
+    "note": "The aggregate accuracy is two things added together, so it is reported split.",
+    "detection_rate": 0.9529,
+    "accuracy_excluding_nothing": 0.9155,
+    "accuracy_given_detection": 0.9276,
+    "nothing_images": 60,
+    "nothing_answered_by_the_no_hand_rule": 60,
+    "real_signs_forced_to_nothing_by_a_detector_miss": 22,
+    "explain": "When MediaPipe finds no hand, the geometry path assigns `nothing` probability 1.0. All 60 holdout `nothing` images have no detected hand, so all 60 are right by construction and the classifier never sees them. The same rule loses 22 real signs before the classifier is consulted. A front-end swap moves the detection rate; a better MLP moves the accuracy-given-detection."
+  },
+  "abstention": {
+    "temperature": 0.7541,
+    "threshold": 0.7896,
+    "target_coverage": 0.9,
+    "measured_coverage": 0.908,
+    "accuracy_among_accepted": 0.9468,
+    "fitted_on": "group-disjoint tuning half of the holdout corpus",
+    "reported_on": "the untouched reporting half, once",
+    "explain": "A wrong letter announced confidently is worse than no letter at all. Both constants are fitted on the FUSED distribution, which is the one the service actually thresholds. The bundle previously carried the pixel model's threshold (0.724, fitted on pixel confidences on the pixel validation split) and applied it to fused probabilities: measured on this holdout that answered 80.7% of photos, not the 90% claimed."
+  },
+  "architecture_search": {
+    "valid_evidence": false,
+    "explain": "The eight-backbone run-off below was ranked on a validation split carved from asl_alphabet at a time when near-duplicate recovery had collapsed 85,664 of its 87,000 images into one component. Validation was therefore the 809-image residue outside that blob - unrepresentative of classes, sessions and lighting by construction. The ranking is kept for the record and is NOT evidence that DeiT III transfers better than the alternatives. The grouping bug is fixed (slr.sources.group_by_frame_block now keys per class, and slr.leakage.recover_groups refuses a collapsed recovery), but the sweep has not been re-run, and re-running it needs a GPU.",
+    "leaderboard": [
+      {
+        "preset": "deit3_base",
+        "name": "DeiT III base",
+        "family": "vit",
+        "params_m": 85.84,
+        "val_f1": 0.9456,
+        "winner": true
+      },
+      {
+        "preset": "vit_base",
+        "name": "ViT base",
+        "family": "vit",
+        "params_m": 85.82,
+        "val_f1": 0.9128,
+        "winner": false
+      },
+      {
+        "preset": "beitv2_base",
+        "name": "BEiT v2 base",
+        "family": "vit",
+        "params_m": 85.78,
+        "val_f1": 0.908,
+        "winner": false
+      },
+      {
+        "preset": "vit_small",
+        "name": "ViT small",
+        "family": "vit",
+        "params_m": 21.68,
+        "val_f1": 0.8939,
+        "winner": false
+      },
+      {
+        "preset": "clip_base",
+        "name": "CLIP base",
+        "family": "vit",
+        "params_m": 85.82,
+        "val_f1": 0.8886,
+        "winner": false
+      },
+      {
+        "preset": "effnetv2_s",
+        "name": "EfficientNetV2 S",
+        "family": "cnn",
+        "params_m": 20.21,
+        "val_f1": 0.8426,
+        "winner": false
+      }
+    ],
+    "leaderboard_note": "Validation macro-F1 over 4 epochs on the degenerate partition described above. Two further candidates (ViT tiny, EfficientFormer S2) failed to train at this data size and are not architecture findings."
+  },
+  "attribution": "Protocol C measures the served 5% pixel / 95% landmark-geometry strategy on all 1,740 holdout images: 0.9118 macro-F1 against 0.674 for pixels alone. Almost all of that is the landmark representation; the pixel fusion on top is statistically unresolved on accuracy and earns its place on calibration. Personal photos were never trained on and were not used to choose the ratio. The geometry training setup was picked in an experiment that printed both the holdout and the personal-photo scores beside every candidate, so neither is an untouched check of it.",
+  "limits": [
+    "The photo path reads fingerspelling only: single static hand shapes, one letter at a time.",
+    "J and Z are a letter plus a motion, so neither is answerable from one frame - the photo corpus labels a frozen mid-trace pose 'Z' and the still model can only ever answer that pose. \"Record a moving sign\" reads a clip with a separate recurrent model that does answer J, Z and five whole-word signs, but its accuracy is not quotable: it was measured clip-disjoint over 296 clips from three signers in one room. Facial grammar is read by neither path.",
+    "Not signer-independent. No corpus here records participant ids, so no held-out-signer claim is supported by any number on this card.",
+    "One test corpus is not a population. The 0.9184 describes the training corpora -> asl_alphabet_test and nothing wider. asl_dynamic, which used to be the untouched third-corpus check, is now in the geometry training pool, so no untouched third corpus remains.",
+    "The holdout has been looked at repeatedly - to compare feature sets, choose a detector, inspect class errors and accept a served model - so it is a diagnostic, not a sealed test.",
+    "Not a substitute for a human interpreter."
+  ]
+}

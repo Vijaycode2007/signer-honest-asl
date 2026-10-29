@@ -1,0 +1,212 @@
+{
+  "generated_by": "scripts/holdout_report.py",
+  "protocol": "cross-corpus isolated handshape. The pixel model trained on asl_alphabet, the geometry model on asl_alphabet + asl_dynamic + signalphaset; both are tested on asl_alphabet_test, which neither trained on. NOT signer-independent: no corpus carries participant ids, so no signer disjointness is established, only corpus disjointness.",
+  "provenance": {
+    "git_sha": "5687de576cea932bc35378a519a918c6e1dbf2e6",
+    "bundle": {
+      "path": "apps/sign-reader/weights/deit3_base_fused.pt",
+      "sha256": "039d56df089eee9be83ad50216bd8f0994e63dbc19252adb4b200b6748736078"
+    },
+    "pixel_predictions": {
+      "path": "runs/fusion/C_predictions.npz",
+      "sha256": "3833aa277243d4365acdaf73ac0da8519cbbf0d4a5f14c0441f6ef1113596420"
+    },
+    "landmark_cache": {
+      "path": "dataset/landmarks/cross.npz",
+      "sha256": "45687b1c90cf88e885431366eb920bf37f33e53e3d6f8505192dfc8dd85aaa88"
+    },
+    "seed": 0,
+    "log_loss_eps": 1e-06
+  },
+  "fusion": {
+    "pixel_weight": 0.05,
+    "geometry_weight": 0.95
+  },
+  "pipelines": {
+    "pixel": {
+      "n": 1740,
+      "accuracy": 0.6977,
+      "macro_f1": 0.674,
+      "log_loss": 1.2462,
+      "detector": {
+        "n": 1740,
+        "acc": 0.6977011494252874,
+        "acc_excluding_nothing": 0.7,
+        "acc_given_detection": 0.6960193003618818,
+        "detection_rate": 0.9528735632183908,
+        "detection_rate_excluding_nothing": 0.986904761904762,
+        "n_nothing": 60,
+        "n_nothing_answered_by_rule": 60,
+        "n_real_signs_forced_to_nothing": 22,
+        "miss_policy": "no hand detected -> P(nothing)=1.0; see `probs`"
+      }
+    },
+    "geometry": {
+      "n": 1740,
+      "accuracy": 0.9195,
+      "macro_f1": 0.9131,
+      "log_loss": 0.4738,
+      "detector": {
+        "n": 1740,
+        "acc": 0.9195402298850575,
+        "acc_excluding_nothing": 0.9166666666666666,
+        "acc_given_detection": 0.9288299155609168,
+        "detection_rate": 0.9528735632183908,
+        "detection_rate_excluding_nothing": 0.986904761904762,
+        "n_nothing": 60,
+        "n_nothing_answered_by_rule": 60,
+        "n_real_signs_forced_to_nothing": 22,
+        "miss_policy": "no hand detected -> P(nothing)=1.0; see `probs`"
+      }
+    },
+    "fused": {
+      "n": 1740,
+      "accuracy": 0.9184,
+      "macro_f1": 0.9118,
+      "log_loss": 0.3554,
+      "detector": {
+        "n": 1740,
+        "acc": 0.9183908045977012,
+        "acc_excluding_nothing": 0.9154761904761904,
+        "acc_given_detection": 0.9276236429433052,
+        "detection_rate": 0.9528735632183908,
+        "detection_rate_excluding_nothing": 0.986904761904762,
+        "n_nothing": 60,
+        "n_nothing_answered_by_rule": 60,
+        "n_real_signs_forced_to_nothing": 22,
+        "miss_policy": "no hand detected -> P(nothing)=1.0; see `probs`"
+      }
+    }
+  },
+  "transitions": {
+    "pixel_to_geometry": {
+      "wrong_to_right": 446,
+      "right_to_wrong": 60,
+      "net": 386
+    },
+    "geometry_to_fused": {
+      "wrong_to_right": 0,
+      "right_to_wrong": 2,
+      "net": -2
+    }
+  },
+  "uncertainty": [
+    {
+      "pair": "pixel -> geometry",
+      "b": 60,
+      "c": 446,
+      "p_value": 0.0,
+      "delta": 0.2218,
+      "ci95_low": 0.1876,
+      "ci95_high": 0.2565,
+      "n_groups": 796,
+      "n_boot": 10000,
+      "resampled": "whole near-duplicate components, not rows",
+      "verdict": "resolved"
+    },
+    {
+      "pair": "geometry -> fused",
+      "b": 2,
+      "c": 0,
+      "p_value": 0.5,
+      "delta": -0.0011,
+      "ci95_low": -0.0035,
+      "ci95_high": 0.0,
+      "n_groups": 796,
+      "n_boot": 10000,
+      "resampled": "whole near-duplicate components, not rows",
+      "verdict": "unresolved"
+    },
+    {
+      "pair": "asl_alphabet_only -> plus_signalphaset",
+      "b": 18,
+      "c": 24,
+      "p_value": 0.4408,
+      "delta": 0.0034,
+      "ci95_low": -0.0068,
+      "ci95_high": 0.0139,
+      "n_groups": 796,
+      "n_boot": 10000,
+      "resampled": "whole near-duplicate components, not rows",
+      "verdict": "unresolved"
+    }
+  ],
+  "more_signers_ab": {
+    "note": "26,000 images the article attributes to three signers, added to the geometry training pool. The corpus carries no per-image signer label, so this is 'more images from one more capture', not a measured signer-diversity gain.",
+    "asl_alphabet_only": {
+      "checkpoint": "runs/signers/before.pt",
+      "sha256": "721657a752ea145b7b09ab62a2a78354e9b215dbf0d636e5da2c6334fc062473",
+      "n": 1740,
+      "accuracy": 0.8931,
+      "macro_f1": 0.8886,
+      "by_side": {
+        "Right": {
+          "n": 1712,
+          "acc": 0.8984,
+          "macro_f1": 0.8912
+        },
+        "Left": {
+          "n": 28,
+          "acc": 0.5714,
+          "macro_f1": 0.6508
+        }
+      }
+    },
+    "plus_signalphaset": {
+      "checkpoint": "runs/signers/after.pt",
+      "sha256": "c58c1a87eda38bbc49931b952d7f4521e5a5d86d02730afbb94a31f1ca3182f3",
+      "n": 1740,
+      "accuracy": 0.8966,
+      "macro_f1": 0.8925,
+      "by_side": {
+        "Right": {
+          "n": 1712,
+          "acc": 0.9019,
+          "macro_f1": 0.8953
+        },
+        "Left": {
+          "n": 28,
+          "acc": 0.5714,
+          "macro_f1": 0.6508
+        }
+      }
+    },
+    "significance": {
+      "pair": "asl_alphabet_only -> plus_signalphaset",
+      "b": 18,
+      "c": 24,
+      "p_value": 0.4408,
+      "delta": 0.0034,
+      "ci95_low": -0.0068,
+      "ci95_high": 0.0139,
+      "n_groups": 796,
+      "n_boot": 10000,
+      "resampled": "whole near-duplicate components, not rows",
+      "verdict": "unresolved"
+    }
+  },
+  "abstention": {
+    "temperature": 0.7541,
+    "threshold": 0.7896,
+    "target_coverage": 0.9,
+    "fitted_on": "group-disjoint tuning half of the holdout corpus",
+    "eps": 1e-06,
+    "tune": {
+      "n": 870,
+      "accuracy": 0.9172,
+      "coverage": 0.9011,
+      "accuracy_among_accepted": 0.9592,
+      "nll": 0.3071,
+      "ece": 0.0387
+    },
+    "report": {
+      "n": 870,
+      "accuracy": 0.9195,
+      "coverage": 0.908,
+      "accuracy_among_accepted": 0.9468,
+      "nll": 0.3096,
+      "ece": 0.0438
+    },
+    "uncalibrated_report_nll": 0.3558
+  }
+}

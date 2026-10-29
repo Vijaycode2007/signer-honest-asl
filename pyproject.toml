@@ -1,0 +1,41 @@
+# Workspace root: packages/slr is the library, apps/sign-reader is the web app.
+[tool.uv.workspace]
+members = ["packages/*", "apps/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "sign-reader",
+    "slr[data]",
+]
+
+[tool.uv.sources]
+slr = { workspace = true }
+sign-reader = { workspace = true }
+# CPU-only torch on Linux, otherwise uv pulls in gigabytes of CUDA wheels.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["._*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# zip(strict=True) everywhere would change runtime behaviour.
+ignore = ["B905"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Body", "fastapi.File", "fastapi.Query"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["slr", "sign_reader"]
+combine-as-imports = true

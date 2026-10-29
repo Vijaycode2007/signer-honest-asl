@@ -1,0 +1,21 @@
+[project]
+name = "sign-reader"
+version = "0.1.0"
+description = "A web app that reads ASL fingerspelling from a photo or a short recording"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "slr",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+]
+
+[tool.uv.sources]
+slr = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sign_reader"]
